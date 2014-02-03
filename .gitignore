@@ -34,3 +34,15 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+#ZooKeeper
+data
+zoo.cfg
+zooKeeper
+
+#Vim
+*.swp
+*.swo
+
+#virtualenv
+localenv
