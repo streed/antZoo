@@ -1,6 +1,7 @@
 import threading
 import random
 import rpyc
+import yaml
 from kazoo.client import KazooClient
 from docopt import docopt
 
@@ -20,6 +21,7 @@ from docopt import docopt
 
 class ElectionRunner( threading.Thread ):
     def __init__( self, ant ):
+        super( ElectionRunner, self ).__init__()
         self.ant = ant
 
     def run( self ):
@@ -38,15 +40,25 @@ class AntZooClientError( Exception ):
 
 class AntZooClient( object ):
 
-    def __init__( self, config )
-        sekf.zk = KazooClient( hosts=hosts )
+    def __init__( self, config ):
 
-        self._client = client
+        self._config = yaml.load( open( config ) )
+        self.zk = KazooClient( hosts="/".join( self._config["zk"] ) )
         self._leader = False
         self._has_leader = False
         self._is_working = False
         self._is_running_for_leader = False
         self._election = None
+
+        self.session_start()
+
+    def session_start( self ):
+        self.zk.start()
+        self.zk.ensure_path( "/nodes" )
+        self.zk.create( "/nodes/%s" % ( self._id ), ephemeral=True )
+
+    def session_stop( self ):
+        self.zk.stop()
 
     @property
     def is_leader( self ):
@@ -60,10 +72,11 @@ class AntZooClient( object ):
             return None
 
     def start_election( self, job_id ):
-        self._election = self.zk.Election( "/work_elections/%s" % job_id, sel.f_id )
+        self._election = self.zk.Election( "/work_elections/%s" % job_id, self._id )
         self._is_running_for_leader = True
 
         self._election_runner = ElectionRunner( self )
+        self._election_runner.start()
 
     def create_work_group( self, group_id ):
         if( self.is_leader ):
@@ -85,14 +98,21 @@ class AntZooClient( object ):
             Creates the group as a permenant node
             then joins the group itself by creating a child as a ephemeral node.
         """
-        self.zk.create( "/work_groups/%s" % group_id )
+        self.zk.ensure_path( "/work_groups/%s" % group_id )
         self._join_work_group( group_id )
 
     def _join_work_group( self, group_id ):
         """
             Joins the group by creating an ephemeral node.
         """
-        self.zk.create( "/work_groups/%s/%s" % ( group_id, self._id ), ephemeral=True )
+        self.zk.ensure_path( "/work_groups/%s" % ( group_id ) )
+
+        if( not self.zk.exists( "/work_groups/%s/%s" % ( group_id, self._id ) ) ):
+            self.zk.create( "/work_groups/%s/%s" % ( group_id, self._id ), ephemeral=True )
+
+
+    def _set_leader( self ):
+        self._leader = True
 
 class AntDaemon( rpyc.Service ):
     """
@@ -143,13 +163,13 @@ class AntDaemon( rpyc.Service ):
         if( not self.zk ):
             arguments = docopt( __doc__, versions="Ant 0.1" )
 
-            self.config = self._read_config( arguments["-c"] )
+            self.config = yaml.load( open( arguments["-c"] ) )
             self.zk = AntZooClient( self.config )
             self.zk.start()
             self._connect_to_peers()
 
     def _connect_to_peers( self ):
-        if( self.zk.exists( "/peers" ) )
+        if( self.zk.exists( "/peers" ) ):
             peers = self.zk.get_children( "/peers", watch=self._change_in_peers )
             peers = random.sample( peers, self.config["fanout"] )
 
@@ -158,7 +178,7 @@ class AntDaemon( rpyc.Service ):
         else:
             self._peers = []
 
-    def _create_peer_connections( peers )
+    def _create_peer_connections( peers ):
         self._peers = []
 
         for p in peers:
@@ -208,7 +228,7 @@ class AntDaemon( rpyc.Service ):
     def exposed_recruit_for( self, job_id ):
         if( not self.is_leader ):
             switch = random.random()
-            threshold = self._is_working ? 0.7: 0.3
+            threshold = 0.7 if self._is_working else 0.3
 
             if( switch > threshold ):
                 self.zk.leave_work_group()
