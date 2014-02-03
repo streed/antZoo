@@ -43,6 +43,7 @@ class AntZooClient( object ):
     def __init__( self, config ):
 
         self._config = yaml.load( open( config ) )
+        self._id = self._config["id"]
         self.zk = KazooClient( hosts="/".join( self._config["zk"] ) )
         self._leader = False
         self._has_leader = False
@@ -55,7 +56,7 @@ class AntZooClient( object ):
     def session_start( self ):
         self.zk.start()
         self.zk.ensure_path( "/nodes" )
-        self.zk.create( "/nodes/%s" % ( self._id ), ephemeral=True )
+        self.zk.create( "/nodes/%s" % ( self._id ), ephemeral=True, makepath=True )
 
     def session_stop( self ):
         self.zk.stop()
@@ -72,11 +73,19 @@ class AntZooClient( object ):
             return None
 
     def start_election( self, job_id ):
-        self._election = self.zk.Election( "/work_elections/%s" % job_id, self._id )
-        self._is_running_for_leader = True
+        if( not self._is_running_for_leader and not self._leader ):
+            self._election = self.zk.Election( "/work_elections/%s" % job_id, self._id )
+            self._is_running_for_leader = True
+            self._last_job_id = job_id
 
-        self._election_runner = ElectionRunner( self )
-        self._election_runner.start()
+            if( not self.zk.exists( "/work_election_signals/%s" % job_id ) ):
+                self.zk.ensure_path( "/work_election_signals/%s" % ( job_id ) )
+            self.zk.get( "/work_election_signals/%s" % job_id, watch=self._cancel_election )
+
+            self._election_runner = ElectionRunner( self )
+            self._election_runner.start()
+        else:
+            raise AntZooClientError( "Cannot start an election while this node is currently in the process of an election." )
 
     def create_work_group( self, group_id ):
         if( self.is_leader ):
@@ -112,7 +121,15 @@ class AntZooClient( object ):
 
 
     def _set_leader( self ):
+        self.zk.set( "/work_election_signals/%s" % self._last_job_id, bytes( "%s" % self._id ) )
+        self._election = None
         self._leader = True
+        self._is_running_for_leader = False
+
+    def _cancel_election( self, data ):
+        print "Leader was found"
+        if( self._election ):
+            self._election.cancel()
 
 class AntDaemon( rpyc.Service ):
     """
