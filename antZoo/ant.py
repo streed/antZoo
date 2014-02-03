@@ -17,6 +17,9 @@ from docopt import docopt
         -c              Where to find the config.
 """
 
+class AntZooClientError( Exception ):
+    pass
+
 class AntZooClient( object ):
 
     def __init__( self, config )
@@ -41,9 +44,9 @@ class AntZooClient( object ):
     def start_election( self, election_id ):
         pass
 
-    def create_group( self, group_id ):
+    def create_work_group( self, group_id ):
         if( self.is_leader ):
-            self._create_group( group_id )
+            self._create_work_group( group_id )
         else:
             raise AntZooClientError( "Cannot create a group when not a leader." )
 
@@ -53,14 +56,22 @@ class AntZooClient( object ):
         else:
             raise AntZooClientError( "Cannot create a group when not a leader." )
 
-    def join_work( self, group_id ):
-        if( not self.is_leader ):
-            self._join_work( group_id )
-        else:
-            raise AntZooClientError( "Cannot join work group when leader." )
+    def join_work_group( self, group_id ):
+        self._join_work_group( group_id )
 
-    def create_result_key( self, job_id ):
-        self._create_result_key( result_id )
+    def _create_work_group( self, group_id ):
+        """
+            Creates the group as a permenant node
+            then joins the group itself by creating a child as a ephemeral node.
+        """
+        self.zk.create( "/work_groups/%s" % group_id )
+        self._join_work_group( group_id )
+
+    def _join_work_group( self, group_id ):
+        """
+            Joins the group by creating an ephemeral node.
+        """
+        self.zk.create( "/work_groups/%s/%s" % ( group_id, self._id ), ephemeral=True )
 
 class AntDaemon( rpyc.Service ):
     """
@@ -168,4 +179,18 @@ class AntDaemon( rpyc.Service ):
         else:
             self._find_new_job_sponsor( job_tuple )
 
+    def _recruit_for_work( self, job_id ):
+        if( self._peers ):
+            for p in peers:
+                p.recruit_for( job_id )
+
+    def exposed_recruit_for( self, job_id ):
+        if( not self.is_leader ):
+            switch = random.random()
+            threshold = self._is_working ? 0.7: 0.3
+
+            if( switch > threshold ):
+                self.zk.leave_work_group()
+                self.zk.join_work_group( job_id )
+            
 
