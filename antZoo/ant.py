@@ -1,3 +1,4 @@
+import threading
 import random
 import rpyc
 from kazoo.client import KazooClient
@@ -17,6 +18,21 @@ from docopt import docopt
         -c              Where to find the config.
 """
 
+class ElectionRunner( threading.Thread ):
+    def __init__( self, ant ):
+        self.ant = ant
+
+    def run( self ):
+        """
+            This will allow for the main thread to continue to run.
+            If the election says that this ant wins then call the
+            _set_leader() method to switch over this ant to that
+            job.
+        """
+        def set_leader():
+            self.ant._set_leader()
+        self.ant._election.run( set_leader )
+
 class AntZooClientError( Exception ):
     pass
 
@@ -29,6 +45,8 @@ class AntZooClient( object ):
         self._leader = False
         self._has_leader = False
         self._is_working = False
+        self._is_running_for_leader = False
+        self._election = None
 
     @property
     def is_leader( self ):
@@ -41,8 +59,11 @@ class AntZooClient( object ):
         else:
             return None
 
-    def start_election( self, election_id ):
-        pass
+    def start_election( self, job_id ):
+        self._election = self.zk.Election( "/work_elections/%s" % job_id, sel.f_id )
+        self._is_running_for_leader = True
+
+        self._election_runner = ElectionRunner( self )
 
     def create_work_group( self, group_id ):
         if( self.is_leader ):
