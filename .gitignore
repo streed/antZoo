@@ -46,3 +46,5 @@ zooKeeper
 
 #virtualenv
 localenv
+
+gen-py/
