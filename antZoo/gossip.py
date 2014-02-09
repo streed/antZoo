@@ -81,4 +81,29 @@ class GossipServiceHandler:
         self._lock.release()
 
     def _spawn_ant( self ):
+        """
+            Spawn the Ant server so that the job can be processed.
+        """
+        if( not self._ant_running ):
+            handler = AntZooServiceHandler( self )
+            processor = AntZooService.Processor( handler )
+            transport = TSocket.TServerSocket( self.config["ant_port"] )
+            tfactory = TTransport.TBufferedTrasnportFactory()
+            pfactory = TBinaryProtocol.TBinaryProtocolFactory()
+
+            server = TServer.TSimpleServer( processor, transport, tfactory, pfactory )
+
+            self._ant_server = server
+
+            class AntThread( threading.Thread ):
+                def __init__( self, gossip ):
+                    self.gossip = gossip
+
+                def run( self ):
+                    self.gossip._ant_server.serve()
+
+            self._ant = AntThread( self )
+            self._ant.run()
+        else:
+            logger.info( "Ant is already running." )
 

@@ -138,3 +138,28 @@ service Gossiping {
   oneway void send_job_update( 1:GossipJobUpdate update ),
 }
 
+/*
+  This is run to run and process jobs that come into
+  the cluster.
+*/
+service AntZoo {
+  /*
+    Called when a new job comes in, this will setup the following:
+      - Work group
+      - Leader path
+  */
+  void new_job( 1:GossipJob job, 2:Ant ant ),
+  
+  /*
+    This is called to send the specific portion of the current
+    job to this node. I.E this task contains the range of the
+    overall job to run.
+  */
+  void process_task( 1:GossipJobTask task ),
+
+  /*
+    Given some job return the current status of that running
+    job.
+  */
+  GossipJobTaskUpdate get_update( 1:GossipJobTask task ),
+}
