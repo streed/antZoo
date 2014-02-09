@@ -66,8 +66,22 @@ class GossipServiceHandler:
         #Spawn the ant server first.
         self._spawn_ant()
 
+        #Setup the job before the recruitment process.
+        self._ant_client.new_job( job )
+
         #Recruit ants for the job.
         self._recruit( job )
+
+    def recruit( self, job, ant ):
+        #Are we a leader already? If yes leaders cannot switch.
+        if( not self.is_leader ):
+            switch = random.random()
+            threshold = 0.7 if self._is_working else 0.3
+
+            if( switch > threshold ):
+                self.zk.leave_work_group()
+                self.zk.join_work_group( job_id )
+
 
     def _recruit( self, job ):
         self._lock.acquire()
@@ -95,8 +109,12 @@ class GossipServiceHandler:
 
             self._ant_server = server
 
+            #This is kind of a hack
+            #Subclass the TServer and allow
+            #for graceful shutdown.
             class AntThread( threading.Thread ):
                 def __init__( self, gossip ):
+                    super( AntThread, self ).__init__()
                     self.gossip = gossip
 
                 def run( self ):

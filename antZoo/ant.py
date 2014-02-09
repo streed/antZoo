@@ -38,7 +38,7 @@ class ElectionRunner( threading.Thread ):
 class AntZooClientError( Exception ):
     pass
 
-class AntZooClient( object ):
+class AntZooHandler:
 
     def __init__( self, config ):
 
@@ -51,15 +51,21 @@ class AntZooClient( object ):
         self._is_running_for_leader = False
         self._election = None
 
-        self.session_start()
+        self.zoo_start()
 
-    def session_start( self ):
+    def zoo_start( self ):
         self.zk.start()
         self.zk.ensure_path( "/nodes" )
         self.zk.create( "/nodes/%s" % ( self._id ), ephemeral=True, makepath=True )
 
-    def session_stop( self ):
+    def zoo_stop( self ):
         self.zk.stop()
+
+    def new_job( self, job ):
+        self.create_work_group( job.id )
+        self.create_work_queue( job.id )
+        self.join_work_group( job.id )
+        self.setup_election( job.id )
 
     @property
     def is_leader( self ):
@@ -130,125 +136,4 @@ class AntZooClient( object ):
         print "Leader was found"
         if( self._election ):
             self._election.cancel()
-
-class AntDaemon( rpyc.Service ):
-    """
-        An Ant must possess the following functionality:
-            - Communicate with other nodes in a gossiping fashion.
-            - Start elections
-            - Perform work
-
-        This is the daemon service that runs on the ant servers
-        to process jobs.
-
-        To facilitate this, an ant uses ZooKeeper to keep track and
-        perform most of those tasks.
-
-        An Ant does the following when it gets a job request.
-
-            It first will create a new job_group with a generated
-            ID. After this has occured a message to it's local
-            view will be sent into the cluster recruiting servers
-            to come work with it. At this point nodes will randomly
-            determine if they will join the work group. If they do then
-            they also join the group based on the group id. Once a 
-            number greater than 2 nodes has joined a group then an 
-            election will occur. Once this election occurs the newly
-            found leader will then determine based on the work load,
-            in our case the work is the number of lines in the data file,
-            and figure out the total number of nodes allowed and create 
-            a semaphor. This semaphor will count down to 0 and once it
-            has reached 0 the group has been formed. At this point
-            the leader will create the work queue and the workers
-            will join the work queue and begin processing tasks. 
-            At this point each node will broadcast to all of it's fellow
-            works work results so that they are durably stored in the 
-            event that they were to go down. In the case of the leader
-            failing then a new election is started and the queue is
-            processed as normally. Once the queue is empty then the
-            leader gathers the results, it should have all of them,
-            and then will make it known that the client can gather the
-            results by getting the node with the data from the ZooKeeper
-            by checking the result key.
-
-
-    """
-
-    zk = None
-    
-    def on_connect( self ):
-        if( not self.zk ):
-            arguments = docopt( __doc__, versions="Ant 0.1" )
-
-            self.config = yaml.load( open( arguments["-c"] ) )
-            self.zk = AntZooClient( self.config )
-            self.zk.start()
-            self._connect_to_peers()
-
-    def _connect_to_peers( self ):
-        if( self.zk.exists( "/peers" ) ):
-            peers = self.zk.get_children( "/peers", watch=self._change_in_peers )
-            peers = random.sample( peers, self.config["fanout"] )
-
-            self._create_peer_connections( peers )
-            self._send_hello_to_peers()
-        else:
-            self._peers = []
-
-    def _create_peer_connections( peers ):
-        self._peers = []
-
-        for p in peers:
-            peer = rpyc.connect( p, 18861 )
-            self._peers.append( peer )
-
-    def _send_hello_to_peers( self ):
-        """
-            This method wakes up this nodes peers.
-        """
-        if( self._peers ):
-            for p in self._peers:
-                p.hello()
-
-
-    def exposed_hello( self ):
-        """
-            This method is called to wake up this service. Is
-            used to help boostrap the service.
-        """
-        pass
-
-    def exposed_new_job( self, job_tuple ):
-        """
-            When a new job comes in a 4-tuple is sent to the
-            node. 
-
-            ( job_id, result_id, data_location, code_location )
-        """
-
-        #A ant cannot be a leader of a job or working currently
-        #to accept a new job, if they are then they must find
-        #another node to perform the work.
-        if( not self._is_working and not self.is_leader ):
-            job_id, result_id, data_location, code_location = job_tuple
-            self.zk.create_work_group( job_id )
-            self.zk.join_work( job_id )
-            self._recruit_for_work( job_id )
-        else:
-            self._find_new_job_sponsor( job_tuple )
-
-    def _recruit_for_work( self, job_id ):
-        if( self._peers ):
-            for p in peers:
-                p.recruit_for( job_id )
-
-    def exposed_recruit_for( self, job_id ):
-        if( not self.is_leader ):
-            switch = random.random()
-            threshold = 0.7 if self._is_working else 0.3
-
-            if( switch > threshold ):
-                self.zk.leave_work_group()
-                self.zk.join_work_group( job_id )
-            
 
