@@ -90,6 +90,11 @@ struct GossipJobUpdate {
   2:JobUpdate update
 }
 
+struct Ant {
+  1:GossipNode node,
+  2:i32 ant_port
+}
+
 /*
   The Gossiping service provides the interface that
   nodes will use to communicate with each other.
@@ -106,18 +111,23 @@ service Gossiping {
   GossipNodeList view( 1:GossipNodeList nodeList ),
 
   /*
+    Retreives the current view from this node.
+  */
+  GossipNodeList get_view(),
+
+  /*
     This simply is used to send a recruit message
     to the network. The node is the node that is 
     currently recruiting.
   */
-  bool recruit( 1:GossipNodeMessage message ),
+  oneway void recruit( 1:Job job, 2:AntNode ant ),
 
   /*
     This sends a job to another node, as soon
     as the job is received the node will begin
     to work on the job.
   */
-  void send_job( 1:GossipJob job ),
+  oneway void send_job( 1:GossipJob job ),
 
   /*
     This is called on the job leader each time
@@ -125,5 +135,6 @@ service Gossiping {
     This allows the leader to keep an up-to-date
     record of what has been completed.
   */
-  void send_job_update( 1:GossipJobUpdate update ),
+  oneway void send_job_update( 1:GossipJobUpdate update ),
 }
+
