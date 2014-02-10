@@ -40,7 +40,7 @@ class GossipServiceHandler:
             the other peer and then randomly merge
             the two lists.
         """
-        ret = None
+        ret = self._nodeList[:]
         self._lock.acquire()
 
         logger.info( "Merging remote view with my view." )
@@ -50,7 +50,7 @@ class GossipServiceHandler:
 
         self._lock.release()
 
-        return self._nodeList
+        return ret
    
    def new_job( self, job ):
        """
