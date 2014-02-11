@@ -3,7 +3,7 @@ import random
 import threading
 import yaml
 
-from gossip.ttypes import GossipStatus, 
+from .gossipService.gossiping.ttypes import GossipStatus, GossipNode
 
 logger = logging.getLogger( __name__ )
 
@@ -19,7 +19,7 @@ class GossipServiceHandler:
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
 
-        self._nodeList = self.load_saved_list( yaml.load( self.config["node_list"] ) )
+        self._nodeList = self._load_saved_list()
 
         self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
         self.zoo_start()
@@ -52,8 +52,8 @@ class GossipServiceHandler:
 
         return ret
    
-   def new_job( self, job ):
-       """
+    def new_job( self, job ):
+        """
             This will start the Ant server and
             start the recruiting process for the 
             job itself. 
@@ -124,4 +124,15 @@ class GossipServiceHandler:
             self._ant.run()
         else:
             logger.info( "Ant is already running." )
+
+    def _load_saved_list( self ):
+        nodeList = yaml.load( open( self.config["node_list"] ) )
+
+        for n in nodeList["nodes"]:
+            pass
+
+        return []
+
+    def _save_nodes( self ):
+        pass
 
