@@ -4,11 +4,28 @@ import threading
 import time
 import yaml
 
-from Queue import Queue
 
+from Queue import Queue
+from thrift import Thrift
+from thrift.transport import TSocket
+from thrift.transport import TTransport
+from thrift.protocol import TBinaryProtocol
+from thrift.server import TServer
+
+from .gossipService.gossiping.Gossiping import Client, Processor
 from .gossipService.gossiping.ttypes import GossipStatus, GossipNode
 
 logger = logging.getLogger( __name__ )
+
+def make_client( address, port ):
+    transport = TSocket.TSocket( address, port )
+    transport = TTransport.TBufferedTrasnportFactory( transport )
+    protocol = TBinaryProtocol.TBinaryProtocol( transport )
+    client = Client( protocol )
+    transport.open()
+
+    return client
+
 
 class GossipServiceHeart( threading.Thread ):
     def __init__( self, gossipService ):
@@ -39,7 +56,7 @@ class GossipServiceHandler:
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
 
-        self._nodeList = self._load_saved_list()
+        self._nodeList, self._nodeClientList = self._load_saved_list()
 
         self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
         self.zoo_start()
@@ -51,6 +68,18 @@ class GossipServiceHandler:
         self._heart.start()
 
         self._setup_zk_watch()
+
+    @classmethod
+    def Server( cls, config ):
+        handler = cls( config )
+        processor = Processor()
+        transport = TSocket.TServerSocket( handler.config["port"] )
+        tfactory = TTransport.TBufferedFactory()
+        pfactory = TBinaryProtocol.TBinaryProtocolFactory()
+
+        server = TServer.TSimpleServer( processor, transport, tfactory, pfactory );
+
+        return server
 
 
     def zoo_start( self ):
@@ -178,11 +207,13 @@ class GossipServiceHandler:
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
         ret = []
+        ret2 = []
 
         for n in nodeList["nodes"]:
             ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
+            ret2.append( make_client( n["address"], n["port"] ) )
 
-        return ret
+        return ret, ret2
 
     def _save_nodes( self ):
         out = []
@@ -201,7 +232,7 @@ class GossipServiceHandler:
         self._zk.ChildrenWatch( "/nodes/views/%s" % self.config["id"], self._zk_view_change )
 
         #Queue a message to be sent to the view.
-        self._queue.push( self._added_to_view, (,) )
+        self._queue.push( self._added_to_view, () )
 
     def _zk_view_change( self, children ):
         pass
