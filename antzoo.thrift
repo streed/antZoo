@@ -112,6 +112,12 @@ service Gossiping {
   GossipNodeList view( 1:GossipNodeList nodeList ),
 
   /*
+    This is called when another node adds this node to its
+    view.
+  */
+  void added_to_view( 1:GossipNode node ),
+
+  /*
     Retreives the current view from this node.
   */
   GossipNodeList get_view(),
@@ -150,7 +156,7 @@ service AntZoo {
       - Leader path
   */
   void new_job( 1:GossipJob job, 2:Ant ant ),
-  
+ 
   /*
     This is called to send the specific portion of the current
     job to this node. I.E this task contains the range of the
@@ -158,11 +164,6 @@ service AntZoo {
   */
   GossipJobUpdate process_task( 1:GossipJob task ),
 
-  /*
-    This is called when another node adds this node to its
-    view.
-  */
-  void added_to_view( 1:GossipNode node ),
 
   /*
     Given some job return the current status of that running
