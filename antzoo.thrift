@@ -121,7 +121,7 @@ service Gossiping {
     to the network. The node is the node that is 
     currently recruiting.
   */
-  oneway void recruit( 1:Job job, 2:AntNode ant ),
+  oneway void recruit( 1:Job job, 2:Ant ant ),
 
   /*
     This sends a job to another node, as soon
@@ -156,7 +156,7 @@ service AntZoo {
     job to this node. I.E this task contains the range of the
     overall job to run.
   */
-  void process_task( 1:GossipJobTask task ),
+  GossipJobUpdate process_task( 1:GossipJob task ),
 
   /*
     This is called when another node adds this node to its
@@ -168,5 +168,5 @@ service AntZoo {
     Given some job return the current status of that running
     job.
   */
-  GossipJobTaskUpdate get_update( 1:GossipJobTask task ),
+  GossipJobUpdate get_update( 1:GossipJob task ),
 }
