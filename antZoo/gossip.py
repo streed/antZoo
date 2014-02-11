@@ -3,9 +3,22 @@ import random
 import threading
 import yaml
 
+from Queue import Queue
+
 from .gossipService.gossiping.ttypes import GossipStatus, GossipNode
 
 logger = logging.getLogger( __name__ )
+
+class GossipServiceHeart( threading.Thread ):
+    def __init__( self, gossipService ):
+        super( GossipServiceHandler, self ).__init__()
+
+        self.gossipService = gossipService
+
+    def run( self ):
+        self.gossipService.round()
+
+        thread.Sleep( self.gossipService._roundTime )
 
 class GossipServiceHandler:
     def __init__( self, config ):
@@ -25,6 +38,11 @@ class GossipServiceHandler:
         self.zoo_start()
 
         self._lock = threading.Lock()
+        self._queue = Queue()
+
+        self._heart = GossipServiceHeart( self )
+        self._heart.start()
+
 
     def zoo_start( self ):
         logger.info( "Starting ZooKeeper session" )
@@ -33,6 +51,14 @@ class GossipServiceHandler:
     def zoo_stop( self ):
         logger.info( "Ending the ZooKeeper session." )
         self._zk.stop()
+
+    def round( self ):
+        """
+            This is called in the heart thread, so it can block.
+        """
+        message = self._queue.get()
+
+        message[0]( *message[1] )
 
     def view( self, nodeList ):
         """
@@ -70,7 +96,7 @@ class GossipServiceHandler:
         self._ant_client.new_job( job )
 
         #Recruit ants for the job.
-        self._recruit( job )
+        self._queue.push( self._recruit, ( job, ) )
 
     def recruit( self, job, ant ):
         #Are we a leader already? If yes leaders cannot switch.
@@ -127,12 +153,19 @@ class GossipServiceHandler:
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
+        ret = []
 
         for n in nodeList["nodes"]:
-            pass
+            ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
 
-        return []
+        return ret
 
     def _save_nodes( self ):
-        pass
+        out = []
+
+        for n in self.nodeList:
+            out.append( { "address": n.address, "port": n.port, "status": n.status } )
+
+        with open( self.config["node_list"], "w" ) as f:
+            f.write( yaml.dump( { "nodes": out } ) )
 
