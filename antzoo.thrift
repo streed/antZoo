@@ -20,7 +20,8 @@ enum GossipStatus {
 struct GossipNode {
   1:string address,
   2:i32 port,
-  3:GossipStatus status
+  3:GossipStatus status,
+  4:string id
 }
 
 typedef list<GossipNode> GossipNodeList
@@ -156,6 +157,12 @@ service AntZoo {
     overall job to run.
   */
   void process_task( 1:GossipJobTask task ),
+
+  /*
+    This is called when another node adds this node to its
+    view.
+  */
+  void added_to_view( 1:GossipNode node ),
 
   /*
     Given some job return the current status of that running

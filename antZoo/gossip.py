@@ -1,6 +1,7 @@
 import logging
 import random
 import threading
+import time
 import yaml
 
 from Queue import Queue
@@ -15,10 +16,16 @@ class GossipServiceHeart( threading.Thread ):
 
         self.gossipService = gossipService
 
+        self.rounds = 0
+
     def run( self ):
+        self.rounds += 1
         self.gossipService.round()
 
         thread.Sleep( self.gossipService._roundTime )
+
+        if( self.rounds % 13 ):
+            self.gossipService._save_nodes()
 
 class GossipServiceHandler:
     def __init__( self, config ):
@@ -42,6 +49,8 @@ class GossipServiceHandler:
 
         self._heart = GossipServiceHeart( self )
         self._heart.start()
+
+        self._setup_zk_watch()
 
 
     def zoo_start( self ):
@@ -108,6 +117,21 @@ class GossipServiceHandler:
                 self.zk.leave_work_group()
                 self.zk.join_work_group( job_id )
 
+    def added_to_view( self, node ):
+        #Add ourselves to this node's view. Make it so when/if we die our node is automatically
+        #deleted.
+        self._zk.create( "/nodes/views/%s/%s" % ( node.id, self.config["id"] ), ephemeral=True )
+
+    def _added_to_view( self ):
+        self._lock.acquire()
+        logger.info( "Requesting that I be added to my view's zk lists." )
+
+        for n in self._nodeClientList:
+            n.added_to_view( self._node )
+
+        self._lock.release()
+
+
 
     def _recruit( self, job ):
         self._lock.acquire()
@@ -168,4 +192,18 @@ class GossipServiceHandler:
 
         with open( self.config["node_list"], "w" ) as f:
             f.write( yaml.dump( { "nodes": out } ) )
+
+    def _setup_zk_watch( self ):
+        #Create the parent node.
+        self._zk.create( "/nodes/views/%s" % self.config["id"], ephemeral=True )
+
+        #Watch for changes.
+        self._zk.ChildrenWatch( "/nodes/views/%s" % self.config["id"], self._zk_view_change )
+
+        #Queue a message to be sent to the view.
+        self._queue.push( self._added_to_view, (,) )
+
+    def _zk_view_change( self, children ):
+        pass
+        
 
