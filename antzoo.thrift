@@ -91,6 +91,12 @@ struct GossipJobUpdate {
   2:JobUpdate update
 }
 
+struct GossipData {
+  1:string uuid,
+  2:string key,
+  3:string value
+}
+
 struct Ant {
   1:GossipNode node,
   2:i32 ant_port
@@ -143,6 +149,12 @@ service Gossiping {
     record of what has been completed.
   */
   oneway void send_job_update( 1:GossipJobUpdate update ),
+
+  /*
+    Dissemenate some information throughout the 
+    cluster.
+  */
+  void disseminate( 1:GossipData data ),
 }
 
 /*
@@ -170,4 +182,5 @@ service AntZoo {
     job.
   */
   GossipJobUpdate get_update( 1:GossipJob task ),
+
 }

@@ -5,6 +5,7 @@ import time
 import yaml
 
 
+from pybloom import BloomFilter
 from Queue import Queue
 from thrift import Thrift
 from thrift.transport import TSocket
@@ -15,11 +16,12 @@ from thrift.server import TServer
 from .gossipService.gossiping.Gossiping import Client, Processor
 from .gossipService.gossiping.ttypes import GossipStatus, GossipNode
 
+logging.basicConfig( level=logging.INFO )
 logger = logging.getLogger( __name__ )
 
 def make_client( address, port ):
     transport = TSocket.TSocket( address, port )
-    transport = TTransport.TBufferedTrasnportFactory( transport )
+    transport = TTransport.TBufferedTransport( transport )
     protocol = TBinaryProtocol.TBinaryProtocol( transport )
     client = Client( protocol )
     transport.open()
@@ -29,37 +31,45 @@ def make_client( address, port ):
 
 class GossipServiceHeart( threading.Thread ):
     def __init__( self, gossipService ):
-        super( GossipServiceHandler, self ).__init__()
+        super( GossipServiceHeart, self ).__init__()
+        self.daemon = True
 
         self.gossipService = gossipService
 
         self.rounds = 0
 
     def run( self ):
-        self.rounds += 1
-        self.gossipService.round()
+        while True:
+            self.rounds += 1
+            self.gossipService.round()
 
-        thread.Sleep( self.gossipService._roundTime )
+            time.sleep( self.gossipService._roundTime )
 
-        if( self.rounds % 13 ):
-            self.gossipService._save_nodes()
+            if( self.rounds % 13 ):
+                self.gossipService._save_nodes()
 
-class GossipServiceHandler:
+            logger.info( "Finished round: %d" % self.rounds )
+
+class GossipServiceHandler( object ):
     def __init__( self, config ):
-        self.messages = {}
+        #create a bloom filter with a capaticy of a million messages
+        #with an error rate of 0.000001%
+        self.messages = BloomFilter( capacity=1000000, error_rate = 0.0001 )
+        self.storage = {}
         self.config = yaml.load( open( config ) )
         self._fanout = int( self.config["fanout"] )
-        self._tick = int( self.config["tick"] )
+        self._tick = int( self.config["tick"] ) / 1000
         self._pulseTicks = int( self.config["pulseTicks"] )
         self._roundTime = self._tick * self._pulseTicks
+        logger.info( "Sleeping between rounds for %f seconds." % self._roundTime )
 
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
 
         self._nodeList, self._nodeClientList = self._load_saved_list()
 
-        self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
-        self.zoo_start()
+        #self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
+        #self.zoo_start()
 
         self._lock = threading.Lock()
         self._queue = Queue()
@@ -67,20 +77,19 @@ class GossipServiceHandler:
         self._heart = GossipServiceHeart( self )
         self._heart.start()
 
-        self._setup_zk_watch()
+        #self._setup_zk_watch()
 
     @classmethod
     def Server( cls, config ):
         handler = cls( config )
-        processor = Processor()
-        transport = TSocket.TServerSocket( handler.config["port"] )
-        tfactory = TTransport.TBufferedFactory()
+        processor = Processor( handler )
+        transport = TSocket.TServerSocket( port=int( handler.config["port"] ) )
+        tfactory = TTransport.TBufferedTransportFactory()
         pfactory = TBinaryProtocol.TBinaryProtocolFactory()
 
         server = TServer.TSimpleServer( processor, transport, tfactory, pfactory );
 
         return server
-
 
     def zoo_start( self ):
         logger.info( "Starting ZooKeeper session" )
@@ -94,9 +103,14 @@ class GossipServiceHandler:
         """
             This is called in the heart thread, so it can block.
         """
-        message = self._queue.get()
+        try:
+            message = self._queue.get( block=False, timeout=self._pulseTicks )
 
-        message[0]( *message[1] )
+            logger.info( message )
+
+            message[0]( *message[1] )
+        except Exception as e:
+            logger.info( e )
 
     def view( self, nodeList ):
         """
@@ -134,7 +148,7 @@ class GossipServiceHandler:
         self._ant_client.new_job( job )
 
         #Recruit ants for the job.
-        self._queue.push( self._recruit, ( job, ) )
+        self._queue.push( ( self._recruit, ( job, ), ) )
 
     def recruit( self, job, ant ):
         #Are we a leader already? If yes leaders cannot switch.
@@ -150,6 +164,24 @@ class GossipServiceHandler:
         #Add ourselves to this node's view. Make it so when/if we die our node is automatically
         #deleted.
         self._zk.create( "/nodes/views/%s/%s" % ( node.id, self.config["id"] ), ephemeral=True )
+
+
+    def disseminate( self, data ):
+        if( not data.uuid in self.messages ):
+            logger.info( "Queuing, disseminate" )
+            self._queue.put( ( self._disseminate, ( data, ), ) )
+            logger.info( "Storing value." )
+            self.storage[data.key] = data.value
+            logger.info( "Add the data.uuid to the self.messages bloom filter" )
+            self.messages.add( data.uuid )
+
+    def _disseminate( self, data ):
+        self._lock.acquire()
+
+        logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
+
+        for n in self._nodeList:
+            n.disseminate( data )
 
     def _added_to_view( self ):
         self._lock.acquire()
@@ -210,15 +242,19 @@ class GossipServiceHandler:
         ret2 = []
 
         for n in nodeList["nodes"]:
-            ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
-            ret2.append( make_client( n["address"], n["port"] ) )
+            try: 
+                c = make_client( n["address"], n["port"] )
+                ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
+                ret2.append( c )
+            except:
+                logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
 
         return ret, ret2
 
     def _save_nodes( self ):
         out = []
 
-        for n in self.nodeList:
+        for n in self._nodeList:
             out.append( { "address": n.address, "port": n.port, "status": n.status } )
 
         with open( self.config["node_list"], "w" ) as f:
