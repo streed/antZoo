@@ -7,3 +7,5 @@ d = GossipData( uuid=str( uuid.uuid4() ), key="lol", value="lol2" )
 c = make_client( "localhost", 33000 )
 c.disseminate( d )
 
+c = make_client( "localhost", 33001 )
+print c.getData()

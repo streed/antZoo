@@ -1,0 +1,12 @@
+<html>
+  <head>
+  </head>
+  <body>
+    {% for n in nodes %}
+    <h1>{{ n[0] }}</h1>
+      {% for d in n[1] %}
+        <b>{{ d.key }}</b> => <b>{{ d.value }}</b></br>
+      {% endfor %}
+    {% endfor %}
+  </body>
+</html>

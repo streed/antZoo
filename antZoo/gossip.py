@@ -14,7 +14,7 @@ from thrift.protocol import TBinaryProtocol
 from thrift.server import TServer
 
 from .gossipService.gossiping.Gossiping import Client, Processor
-from .gossipService.gossiping.ttypes import GossipStatus, GossipNode
+from .gossipService.gossiping.ttypes import GossipStatus, GossipNode, GossipData
 
 logging.basicConfig( level=logging.INFO )
 logger = logging.getLogger( __name__ )
@@ -185,6 +185,11 @@ class GossipServiceHandler( object ):
 
         logger.info( "Done disseminating." )
         self._lock.release()
+
+    def getData( self ):
+        data = [ GossipData( uuid="", key=k, value=v ) for k, v in self.storage.iteritems() ]
+
+        return data
 
     def _added_to_view( self ):
         self._lock.acquire()

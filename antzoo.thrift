@@ -97,6 +97,8 @@ struct GossipData {
   3:string value
 }
 
+typedef list<GossipData> GossipDataList
+
 struct Ant {
   1:GossipNode node,
   2:i32 ant_port
@@ -155,6 +157,11 @@ service Gossiping {
     cluster.
   */
   void disseminate( 1:GossipData data ),
+
+  /*
+    Retreive a list of GossipData stored on each node.
+  */
+  GossipDataList getData(),
 }
 
 /*
