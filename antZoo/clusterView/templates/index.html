@@ -1,8 +1,25 @@
 <html>
   <head>
+    <script>
+      setInterval( function() {
+          var i = document.getElementById('nodes');
+          i.src = i.src;
+      }, 1000 );
+    </script>
   </head>
   <body>
-    <iframe src="/nodes" width="768" height="500">
+    <iframe src="/nodes" width="768" height="500" id="nodes">
     </iframe>
+
+    {% for e in form.errors %}
+      {{ e }}
+    {% endfor %}
+
+    <form action="" method="post">
+      {{form.hidden_tag()}}
+      {{form.key}}
+      {{form.value}}
+      <button type="submit">Submit</button>
+    </form>
   </body>
 </html>
