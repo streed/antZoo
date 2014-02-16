@@ -45,10 +45,9 @@ class GossipServiceHeart( threading.Thread ):
 
             time.sleep( self.gossipService._roundTime )
 
-            if( self.rounds % 13 ):
-                self.gossipService._save_nodes()
-
-            logger.info( "Finished round: %d" % self.rounds )
+            if( self.rounds % 5 == 0 ):
+                #self.gossipService._save_nodes()
+                self.gossipService.attemptBadNodes()
 
 class GossipServiceHandler( object ):
     def __init__( self, config ):
@@ -66,7 +65,7 @@ class GossipServiceHandler( object ):
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
 
-        self._nodeList, self._nodeClientList = self._load_saved_list()
+        self._nodeList, self._nodeClientList, self._badNodesList = self._load_saved_list()
 
         #self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
         #self.zoo_start()
@@ -87,7 +86,7 @@ class GossipServiceHandler( object ):
         tfactory = TTransport.TBufferedTransportFactory()
         pfactory = TBinaryProtocol.TBinaryProtocolFactory()
 
-        server = TServer.TSimpleServer( processor, transport, tfactory, pfactory );
+        server = TServer.TThreadedServer( processor, transport, tfactory, pfactory );
 
         return server
 
@@ -110,7 +109,8 @@ class GossipServiceHandler( object ):
 
             message[0]( *message[1] )
         except Exception as e:
-            logger.info( e )
+            if( not str( e ) == "" ):
+                logger.info( e )
 
     def view( self, nodeList ):
         """
@@ -180,8 +180,11 @@ class GossipServiceHandler( object ):
 
         logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
-        for n in self._nodeList:
+        for n in self._nodeClientList:
             n.disseminate( data )
+
+        logger.info( "Done disseminating." )
+        self._lock.release()
 
     def _added_to_view( self ):
         self._lock.acquire()
@@ -236,10 +239,27 @@ class GossipServiceHandler( object ):
         else:
             logger.info( "Ant is already running." )
 
+    def attemptBadNodes( self ):
+        newBadList = []
+        for b in self._badNodesList:
+            try:
+                logger.info( "Attempting to reconnect to %s:%d" % ( b.address, b.port ) )
+                c = make_client( b.address, b.port )
+                self._nodeClientList.append( c )
+                self._nodeList.append( b )
+            except:
+                logger.info( "Attempted to reconnect to node: %s:%d" % ( b.address, b.port ) )
+                newBadList.append( b )
+
+        self._badNodesList = newBadList
+
+
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
         ret = []
         ret2 = []
+
+        bad_nodes = []
 
         for n in nodeList["nodes"]:
             try: 
@@ -248,8 +268,9 @@ class GossipServiceHandler( object ):
                 ret2.append( c )
             except:
                 logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
+                bad_nodes.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
 
-        return ret, ret2
+        return ret, ret2, bad_nodes
 
     def _save_nodes( self ):
         out = []
