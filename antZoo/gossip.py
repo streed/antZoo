@@ -66,6 +66,9 @@ class GossipServiceHandler( object ):
         self._tick = int( self.config["tick"] ) / 1000
         self._pulseTicks = int( self.config["pulseTicks"] )
         self._roundTime = self._tick * self._pulseTicks
+        self._lock = threading.Lock()
+        self._queue = Queue()
+
         logger.info( "Sleeping between rounds for %f seconds." % self._roundTime )
 
         self._status = GossipStatus.IDLE
@@ -76,8 +79,6 @@ class GossipServiceHandler( object ):
         #self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
         #self.zoo_start()
 
-        self._lock = threading.Lock()
-        self._queue = Queue()
 
         self._heart = GossipServiceHeart( self )
         self._heart.start()
