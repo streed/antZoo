@@ -25,12 +25,11 @@ def make_client( address, port ):
     protocol = TBinaryProtocol.TBinaryProtocol( transport )
     client = Client( protocol )
     transport.open()
-    client.transport = transport
 
     return client
 
 def destroy_client( c ):
-    c.transport.close()
+    pass
 
 
 class GossipServiceHeart( threading.Thread ):
