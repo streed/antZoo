@@ -21,7 +21,6 @@ logger = logging.getLogger( __name__ )
 
 def make_client( address, port ):
     transport = TSocket.TSocket( address, port )
-    transport.settimeout( 10 * 1000 )
     transport = TTransport.TBufferedTransport( transport )
     protocol = TBinaryProtocol.TBinaryProtocol( transport )
     client = Client( protocol )
@@ -45,9 +44,6 @@ class GossipServiceHeart( threading.Thread ):
                 self.rounds += 1
                 self.gossipService.round()
 
-                if( self.rounds % 5 == 0 ):
-                    logger.info( "Attempting bad nodes." )
-                    self.gossipService.attemptBadNodes()
                 if( self.rounds % 7 == 0 ):
                     logger.info( "Exchanging views." )
                     self.gossipService.exchangeViews()
@@ -206,9 +202,10 @@ class GossipServiceHandler( object ):
 
         logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
-        for n in self._nodeClientList:
+        for n in self._nodeList:
             logger.info( n )
-            n.disseminate( data )
+            c = make_client( n.address, n.port )
+            c.disseminate( data )
 
         logger.info( "Done disseminating." )
         self._lock.release()
@@ -222,9 +219,9 @@ class GossipServiceHandler( object ):
         self._lock.acquire()
         logger.info( "Requesting that I be added to my view's zk lists." )
 
-        for n in self._nodeClientList:
-            n.added_to_view( self._node )
-
+        for n in self._nodeList:
+            c = make_client( n.address, n.port )
+            c.added_to_view( self._node )
         self._lock.release()
 
 
@@ -277,7 +274,6 @@ class GossipServiceHandler( object ):
             try:
                 logger.info( "Attempting to reconnect to %s:%d" % ( b.address, b.port ) )
                 c = make_client( b.address, b.port )
-                self._nodeClientList.append( c )
                 self._nodeList.append( b )
             except:
                 logger.info( "Attempted to reconnect to node: %s:%d" % ( b.address, b.port ) )
@@ -288,36 +284,35 @@ class GossipServiceHandler( object ):
     def exchangeViews( self ):
         self._lock.acquire()
 
-        for n in self._nodeClientList:
+        for n in self._nodeList:
             logger.info( "View: %s" % n )
-            n.view( self._nodeList + [ self._node ] )
+            c = make_client( n.address, n.port )
+            c.view( self._nodeList + [ self._node ] )
 
         self._lock.release()
 
     def reload_nodes( self ):
         self._lock.acquire()
 
-        self._nodeList, self._nodeClientList, self._badNodesList = self._load_saved_list()
+        self._nodeList, self._badNodesList = self._load_saved_list()
 
         self._lock.release()
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
         ret = []
-        ret2 = []
 
         bad_nodes = []
 
         for n in nodeList["nodes"]:
             try: 
-                c = make_client( n["address"], n["port"] )
+                make_client( n["address"], n["port"] )
                 ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
-                ret2.append( c )
             except:
                 logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
                 bad_nodes.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
 
-        return ret, ret2, bad_nodes
+        return ret, bad_nodes
 
     def _save_nodes( self ):
         self._lock.acquire()
