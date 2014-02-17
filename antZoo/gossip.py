@@ -290,8 +290,11 @@ class GossipServiceHandler( object ):
         self._lock.release()
 
     def reload_nodes( self ):
+        self._lock.acquire()
+
         self._nodeList, self._nodeClientList, self._badNodesList = self._load_saved_list()
 
+        self._lock.release()
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
@@ -312,6 +315,8 @@ class GossipServiceHandler( object ):
         return ret, ret2, bad_nodes
 
     def _save_nodes( self ):
+        self._lock.acquire()
+
         out = []
 
         for n in self._nodeList:
@@ -319,6 +324,8 @@ class GossipServiceHandler( object ):
 
         with open( self.config["node_list"], "w" ) as f:
             f.write( yaml.dump( { "nodes": out } ) )
+
+        self._lock.release()
 
     def _setup_zk_watch( self ):
         #Create the parent node.
