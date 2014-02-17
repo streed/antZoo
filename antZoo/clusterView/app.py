@@ -37,17 +37,20 @@ def index():
     views = []
 
     for n in nodes:
-        c = make_client( n["address"], n["port"] )
+        try:
+            c = make_client( n["address"], n["port"] )
 
-        data = c.getData()
-        view = c.get_view()
+            data = c.getData()
+            view = c.get_view()
 
-        for v in view:
-            i = { "address": v.address, "port": v.port }
-            if not i in nodes:
-                nodes.append( i )
+            for v in view:
+                i = { "address": v.address, "port": v.port }
+                if not i in nodes:
+                    nodes.append( i )
 
-        nodes2.append( ( "%s:%d" % ( n["address"], n["port"] ), data[:], view ) )
+            nodes2.append( ( "%s:%d" % ( n["address"], n["port"] ), data[:], view ) )
+        except:
+            pass
  
     return render_template( "index.html", form=form, nodes=nodes2 )
 
@@ -56,11 +59,14 @@ def nodesValues():
     ret = []
 
     for n in nodes:
-        c = make_client( n["address"], n["port"] )
+        try:
+            c = make_client( n["address"], n["port"] )
 
-        data = c.getData()
+            data = c.getData()
 
-        ret.append( ( "%s:%d" % ( n["address"], n["port"] ), data[:] ) )
+            ret.append( ( "%s:%d" % ( n["address"], n["port"] ), data[:] ) )
+        except:
+            pass
 
     return render_template( "nodes.html", nodes=ret )
 
