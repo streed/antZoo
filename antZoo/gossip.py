@@ -44,12 +44,12 @@ class GossipServiceHeart( threading.Thread ):
                 self.rounds += 1
                 self.gossipService.round()
 
-                if( self.rounds % 13 == 0 ):
-                    logger.info( "Attempting bad nodes." )
-                    self.gossipService.attemptBadNodes()
-                if( self.rounds % 17 == 0 ):
-                    logger.info( "Exchanging views." )
-                    self.gossipService.exchangeViews()
+                #if( self.rounds % 13 == 0 ):
+                #    logger.info( "Attempting bad nodes." )
+                #    self.gossipService.attemptBadNodes()
+                #if( self.rounds % 17 == 0 ):
+                #    logger.info( "Exchanging views." )
+                #    self.gossipService.exchangeViews()
             except Exception as e:
                 logger.info( e )
             finally:
