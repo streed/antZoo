@@ -49,7 +49,8 @@ class GossipServiceHeart( threading.Thread ):
 
                 if( self.rounds % 7 == 0 ):
                     logger.info( "Exchanging views." )
-                    self.gossipService.exchangeViews()
+                    #self.gossipService.exchangeViews()
+                    self.gossipService._queue.put( ( self.gossipService.exchangeViews, (), ) )
             except Exception as e:
                 logger.info( e )
             finally:
@@ -127,30 +128,30 @@ class GossipServiceHandler( object ):
             the two lists.
         """
         ret = self._nodeList[:]
-        self._lock.acquire()
+        if( self._lock.acquire( blocking=True ) ):
 
-        logger.info( "Merging remote view with my view." )
+            logger.info( "Merging remote view with my view." )
 
-        poolNodes = nodeList + self._nodeList 
-        pool = { "%s:%d" % ( n.address, n.port ) for n in poolNodes if n != self._node }
+            poolNodes = nodeList + self._nodeList 
+            pool = { "%s:%d" % ( n.address, n.port ) for n in poolNodes if n != self._node }
 
-        logger.info( "Node to choose from: %s" % pool )
+            logger.info( "Node to choose from: %s" % pool )
 
-        if( len( pool ) < self._fanout ):
-            ret = self._nodeList[:]
-        else:
-            c = random.sample( pool, self._fanout )
-            c = { ( "%s:%d" % ( n.address, n.port ) ): n for n in poolNodes if "%s:%d" % ( n.address, n.port ) in c }
-            self._nodeList = c.values()
+            if( len( pool ) < self._fanout ):
+                ret = self._nodeList[:]
+            else:
+                c = random.sample( pool, self._fanout )
+                c = { ( "%s:%d" % ( n.address, n.port ) ): n for n in poolNodes if "%s:%d" % ( n.address, n.port ) in c }
+                self._nodeList = c.values()
 
-        self._save_nodes()
-        self.reload_nodes()
+            self._save_nodes()
+            self.reload_nodes()
 
-        logger.info( "NodeList: %s" % self._nodeList )
+            logger.info( "NodeList: %s" % self._nodeList )
 
-        self._lock.release()
+            self._lock.release()
 
-        return ret
+            return ret
 
     def get_view( self ):
         return self._nodeList
@@ -201,19 +202,19 @@ class GossipServiceHandler( object ):
             self.messages.add( data.uuid )
 
     def _disseminate( self, data ):
-        self._lock.acquire()
+        if( self._lock.acquire( blocking=True ) ):
 
-        logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
+            logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
-        for n in self._nodeList:
-            logger.info( n )
-            c = make_client( n.address, n.port )
-            c.disseminate( data )
+            for n in self._nodeList:
+                logger.info( n )
+                c = make_client( n.address, n.port )
+                c.disseminate( data )
 
-            destroy_client( c )
+                destroy_client( c )
 
-        logger.info( "Done disseminating." )
-        self._lock.release()
+            logger.info( "Done disseminating." )
+            self._lock.release()
 
     def getData( self ):
         data = [ GossipData( uuid="", key=k, value=v ) for k, v in self.storage.iteritems() ]
@@ -221,28 +222,28 @@ class GossipServiceHandler( object ):
         return data
 
     def _added_to_view( self ):
-        self._lock.acquire()
-        logger.info( "Requesting that I be added to my view's zk lists." )
+        if( self._lock.acquire( blocking=True ) ):
+            logger.info( "Requesting that I be added to my view's zk lists." )
 
-        for n in self._nodeList:
-            c = make_client( n.address, n.port )
-            c.added_to_view( self._node )
+            for n in self._nodeList:
+                c = make_client( n.address, n.port )
+                c.added_to_view( self._node )
 
-            destroy_client( c )
-        self._lock.release()
+                destroy_client( c )
+            self._lock.release()
 
 
 
     def _recruit( self, job ):
-        self._lock.acquire()
-        logger.info( "Recruting Ants to work on the new job." )
+        if( self._lock.acquire( blocking=True ) ):
+            logger.info( "Recruting Ants to work on the new job." )
 
-        ant = Ant( self._node, int( self.config["ant_port"] ) )
+            ant = Ant( self._node, int( self.config["ant_port"] ) )
 
-        for n in self._nodeList:
-            n.recruit( job, ant )
+            for n in self._nodeList:
+                n.recruit( job, ant )
 
-        self._lock.release()
+            self._lock.release()
 
     def _spawn_ant( self ):
         """
@@ -290,22 +291,22 @@ class GossipServiceHandler( object ):
         self._badNodesList = newBadList
 
     def exchangeViews( self ):
-        self._lock.acquire()
+        if( self._lock.acquire( blocking=True ) ):
 
-        for n in self._nodeList:
-            logger.info( "View: %s" % n )
-            c = make_client( n.address, n.port )
-            destroy_client( c )
-            c.view( self._nodeList + [ self._node ] )
+            for n in self._nodeList:
+                logger.info( "View: %s" % n )
+                c = make_client( n.address, n.port )
+                destroy_client( c )
+                c.view( self._nodeList + [ self._node ] )
 
-        self._lock.release()
+            self._lock.release()
 
     def reload_nodes( self ):
-        self._lock.acquire()
+        if( self._lock.acquire( blocking=True ) ):
 
-        self._nodeList, self._badNodesList = self._load_saved_list()
+            self._nodeList, self._badNodesList = self._load_saved_list()
 
-        self._lock.release()
+            self._lock.release()
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
@@ -326,17 +327,17 @@ class GossipServiceHandler( object ):
         return ret, bad_nodes
 
     def _save_nodes( self ):
-        self._lock.acquire()
+        if( self._lock.acquire( blocking=True ) ):
 
-        out = []
+            out = []
 
-        for n in self._nodeList:
-            out.append( { "address": n.address, "port": n.port, "status": n.status } )
+            for n in self._nodeList:
+                out.append( { "address": n.address, "port": n.port, "status": n.status } )
 
-        with open( self.config["node_list"], "w" ) as f:
-            f.write( yaml.dump( { "nodes": out } ) )
+            with open( self.config["node_list"], "w" ) as f:
+                f.write( yaml.dump( { "nodes": out } ) )
 
-        self._lock.release()
+            self._lock.release()
 
     def _setup_zk_watch( self ):
         #Create the parent node.
