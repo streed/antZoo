@@ -49,4 +49,4 @@ localenv
 
 gen-py/
 
-sample_configs/
+sample_configs/*

@@ -21,6 +21,7 @@ logger = logging.getLogger( __name__ )
 
 def make_client( address, port ):
     transport = TSocket.TSocket( address, port )
+    transport.settimeout( 2000 )
     transport = TTransport.TBufferedTransport( transport )
     protocol = TBinaryProtocol.TBinaryProtocol( transport )
     client = Client( protocol )
