@@ -28,6 +28,9 @@ def make_client( address, port ):
 
     return client
 
+def destroy_client( c ):
+    c.transport.close()
+
 
 class GossipServiceHeart( threading.Thread ):
     def __init__( self, gossipService ):
@@ -207,6 +210,8 @@ class GossipServiceHandler( object ):
             c = make_client( n.address, n.port )
             c.disseminate( data )
 
+            destroy_client( c )
+
         logger.info( "Done disseminating." )
         self._lock.release()
 
@@ -222,6 +227,8 @@ class GossipServiceHandler( object ):
         for n in self._nodeList:
             c = make_client( n.address, n.port )
             c.added_to_view( self._node )
+
+            destroy_client( c )
         self._lock.release()
 
 
@@ -274,6 +281,7 @@ class GossipServiceHandler( object ):
             try:
                 logger.info( "Attempting to reconnect to %s:%d" % ( b.address, b.port ) )
                 c = make_client( b.address, b.port )
+                destroy_client( c )
                 self._nodeList.append( b )
             except:
                 logger.info( "Attempted to reconnect to node: %s:%d" % ( b.address, b.port ) )
@@ -287,6 +295,7 @@ class GossipServiceHandler( object ):
         for n in self._nodeList:
             logger.info( "View: %s" % n )
             c = make_client( n.address, n.port )
+            destroy_client( c )
             c.view( self._nodeList + [ self._node ] )
 
         self._lock.release()
@@ -306,7 +315,8 @@ class GossipServiceHandler( object ):
 
         for n in nodeList["nodes"]:
             try: 
-                make_client( n["address"], n["port"] )
+                c = make_client( n["address"], n["port"] )
+                destroy_client( c )
                 ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
             except:
                 logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
