@@ -1,0 +1,26 @@
+<html>
+  <head>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.4.4/jquery.min.js"></script>
+    <script type="text/javascript" src="/static/arbor.js"></script>
+    <script type="text/javascript" src="/static/graphics.js"></script>
+    <script type="text/javascript" src="/static/renderer.js"></script>
+  </head>
+  <body>
+    <canvas id="viewport" width="740" height="480"></canvas>
+  </body>
+  <script>
+    var sys = arbor.ParticleSystem( 1000, 400, 1 );
+    sys.parameters( { gravity: true } );
+    sys.renderer = Renderer( "#viewport" );
+
+    {% for n in nodes %}
+      sys.addNode( "{{ n[0] }}", { 'mass': 2, 'color': 'green', 'shape': 'dot', 'label': "{{ n[0] }}" } );
+    {% endfor %}
+
+    {% for n in nodes %}
+      {% for v in n[1] %}
+        sys.addEdge( "{{ n[0] }}", "{{ v }}" );
+      {% endfor %}
+    {% endfor %}
+  </script>
+</html>

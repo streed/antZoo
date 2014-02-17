@@ -46,8 +46,11 @@ class GossipServiceHeart( threading.Thread ):
             time.sleep( self.gossipService._roundTime )
 
             if( self.rounds % 5 == 0 ):
-                #self.gossipService._save_nodes()
+                logger.info( "Attempting bad nodes." )
                 self.gossipService.attemptBadNodes()
+            if( self.rounds % 7 == 0 ):
+                logger.info( "Exchanging views." )
+                self.gossipService.exchangeViews()
 
 class GossipServiceHandler( object ):
     def __init__( self, config ):
@@ -64,8 +67,8 @@ class GossipServiceHandler( object ):
 
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
-
-        self._nodeList, self._nodeClientList, self._badNodesList = self._load_saved_list()
+        
+        self.reload_nodes()
 
         #self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
         #self.zoo_start()
@@ -123,12 +126,29 @@ class GossipServiceHandler( object ):
 
         logger.info( "Merging remote view with my view." )
 
-        pool = nodeList + self._nodeList 
-        self._nodeList = random.choice( pool, self._fanout )
+        poolNodes = nodeList + self._nodeList 
+        pool = { "%s:%d" % ( n.address, n.port ) for n in poolNodes if n != self._node }
+
+        logger.info( "Node to choose from: %s" % pool )
+
+        if( len( pool ) < self._fanout ):
+            ret = self._nodeList[:]
+        else:
+            c = random.sample( pool, self._fanout )
+            c = { ( "%s:%d" % ( n.address, n.port ) ): n for n in poolNodes if "%s:%d" % ( n.address, n.port ) in c }
+            self._nodeList = c.values()
+
+        self._save_nodes()
+        self.reload_nodes()
+
+        logger.info( "NodeList: %s" % self._nodeList )
 
         self._lock.release()
 
         return ret
+
+    def get_view( self ):
+        return self._nodeList
    
     def new_job( self, job ):
         """
@@ -257,6 +277,17 @@ class GossipServiceHandler( object ):
                 newBadList.append( b )
 
         self._badNodesList = newBadList
+
+    def exchangeViews( self ):
+        self._lock.acquire()
+
+        for n in self._nodeClientList:
+            n.view( self._nodeList + [ self._node ] )
+
+        self._lock.release()
+
+    def reload_nodes( self ):
+        self._nodeList, self._nodeClientList, self._badNodesList = self._load_saved_list()
 
 
     def _load_saved_list( self ):

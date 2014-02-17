@@ -48,3 +48,5 @@ zooKeeper
 localenv
 
 gen-py/
+
+sample_configs/

@@ -5,6 +5,10 @@
           var i = document.getElementById('nodes');
           i.src = i.src;
       }, 1000 );
+      setInterval( function() {
+          var i = document.getElementById('views');
+          i.src = i.src;
+      }, 10000 );
     </script>
   </head>
   <body>
@@ -21,5 +25,8 @@
       {{form.value}}
       <button type="submit">Submit</button>
     </form>
+
+    <iframe src="/views" width="768" height="500" id="views">
+    </iframe>
   </body>
 </html>
