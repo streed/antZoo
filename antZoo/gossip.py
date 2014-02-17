@@ -44,12 +44,12 @@ class GossipServiceHeart( threading.Thread ):
                 self.rounds += 1
                 self.gossipService.round()
 
-                #if( self.rounds % 13 == 0 ):
-                #    logger.info( "Attempting bad nodes." )
-                #    self.gossipService.attemptBadNodes()
-                #if( self.rounds % 17 == 0 ):
-                #    logger.info( "Exchanging views." )
-                #    self.gossipService.exchangeViews()
+                if( self.rounds % 5 == 0 ):
+                    logger.info( "Attempting bad nodes." )
+                    self.gossipService.attemptBadNodes()
+                if( self.rounds % 7 == 0 ):
+                    logger.info( "Exchanging views." )
+                    self.gossipService.exchangeViews()
             except Exception as e:
                 logger.info( e )
             finally:
@@ -66,7 +66,7 @@ class GossipServiceHandler( object ):
         self._tick = int( self.config["tick"] ) / 1000
         self._pulseTicks = int( self.config["pulseTicks"] )
         self._roundTime = self._tick * self._pulseTicks
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._queue = Queue()
 
         logger.info( "Sleeping between rounds for %f seconds." % self._roundTime )
@@ -110,6 +110,7 @@ class GossipServiceHandler( object ):
             This is called in the heart thread, so it can block.
         """
         try:
+            logger.info( "Getting item from queue." )
             message = self._queue.get( block=False, timeout=self._pulseTicks )
 
             logger.info( message )
@@ -205,6 +206,7 @@ class GossipServiceHandler( object ):
         logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
         for n in self._nodeClientList:
+            logger.info( n )
             n.disseminate( data )
 
         logger.info( "Done disseminating." )
@@ -286,6 +288,7 @@ class GossipServiceHandler( object ):
         self._lock.acquire()
 
         for n in self._nodeClientList:
+            logger.info( "View: %s" % n )
             n.view( self._nodeList + [ self._node ] )
 
         self._lock.release()
