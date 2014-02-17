@@ -320,6 +320,7 @@ class GossipServiceHandler( object ):
                 ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
             except:
                 logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
+                ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
                 bad_nodes.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
 
         return ret, bad_nodes
