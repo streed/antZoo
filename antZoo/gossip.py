@@ -56,39 +56,6 @@ class GossipServiceHeart( threading.Thread ):
             finally:
                 time.sleep( self.gossipService._roundTime )
 
-class GossipRouting( object ):
-    def __init__( self, me ):
-      self._nodes = {}
-      self._view = []
-      self._me = me
-
-    def add_path( self, to, through ):
-      if not to in self._routes:
-        self._routes[to] = []
-    
-      if through == None:
-        self._routes[to].append( (me, to,) )
-      else:
-        self._routes[to].append( (me, through, to, ) )
-
-      self._routes[to].sort( key=lambda a: len( a ) )
-
-    def get_path( self, to ):
-      if to in self._routes:
-        return self._routes[to][0]
-      else:
-        return []
-
-    def view( self ):
-      keys = sorted( self._nodes.keys(), key=lambda a: a.id )
-
-      ret = []
-
-      for i in self._view:
-        ret.append( keys[i] )
-
-      return ret
-
 
 class GossipServiceHandler( object ):
     def __init__( self, config ):
@@ -140,14 +107,13 @@ class GossipServiceHandler( object ):
             if( not str( e ) == "" ):
                 logger.info( e )
 
-    def view( self, nodeList ):
+    def view( self, view ):
         """
             This will take in the nodeList from
             the other peer and then randomly merge
             the two lists.
         """
         ret = self._nodeList[:]
-        #self._lock.acquire()
 
         logger.info( "Merging remote view with my view." )
 
@@ -167,8 +133,6 @@ class GossipServiceHandler( object ):
         self.reload_nodes()
 
         logger.info( "NodeList: %s" % self._nodeList )
-
-        #self._lock.release()
 
         return ret
 
@@ -221,8 +185,6 @@ class GossipServiceHandler( object ):
             self.messages.add( data.uuid )
 
     def _disseminate( self, data ):
-        #self._lock.acquire()
-
         logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
         for n in self._nodeList:
@@ -233,7 +195,6 @@ class GossipServiceHandler( object ):
             destroy_client( c )
 
         logger.info( "Done disseminating." )
-        #self._lock.release()
 
     def getData( self ):
         data = [ GossipData( uuid="", key=k, value=v ) for k, v in self.storage.iteritems() ]
@@ -241,7 +202,6 @@ class GossipServiceHandler( object ):
         return data
 
     def _added_to_view( self ):
-        #self._lock.acquire()
         logger.info( "Requesting that I be added to my view's zk lists." )
 
         for n in self._nodeList:
@@ -249,20 +209,14 @@ class GossipServiceHandler( object ):
             c.added_to_view( self._node )
 
             destroy_client( c )
-        #self._lock.release()
-
-
 
     def _recruit( self, job ):
-        #self._lock.acquire()
         logger.info( "Recruting Ants to work on the new job." )
 
         ant = Ant( self._node, int( self.config["ant_port"] ) )
 
         for n in self._nodeList:
             n.recruit( job, ant )
-
-        #self._lock.release()
 
     def _spawn_ant( self ):
         """
@@ -310,22 +264,14 @@ class GossipServiceHandler( object ):
         self._badNodesList = newBadList
 
     def exchangeViews( self ):
-        #self._lock.acquire()
-
         for n in self._nodeList:
             logger.info( "View: %s" % n )
             c = make_client( n.address, n.port )
             destroy_client( c )
             c.view( self._nodeList + [ self._node ] )
 
-        #self._lock.release()
-
     def reload_nodes( self ):
-        #self._lock.acquire()
-
         self._nodeList, self._badNodesList = self._load_saved_list()
-
-        #self._lock.release()
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
@@ -346,29 +292,11 @@ class GossipServiceHandler( object ):
         return ret, bad_nodes
 
     def _save_nodes( self ):
-        #self._lock.acquire()
-
         out = []
 
         for n in self._nodeList:
             out.append( { "address": n.address, "port": n.port, "status": n.status } )
 
         with open( self.config["node_list"], "w" ) as f:
-            f.write( yaml.dump( { "nodes": out } ) )
-
-        #self._lock.release()
-
-    def _setup_zk_watch( self ):
-        #Create the parent node.
-        self._zk.create( "/nodes/views/%s" % self.config["id"], ephemeral=True )
-
-        #Watch for changes.
-        self._zk.ChildrenWatch( "/nodes/views/%s" % self.config["id"], self._zk_view_change )
-
-        #Queue a message to be sent to the view.
-        self._queue.push( self._added_to_view, () )
-
-    def _zk_view_change( self, children ):
-        pass
-        
+            f.write( yaml.dump( { "nodes": out } ) ) 
 

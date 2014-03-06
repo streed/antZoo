@@ -26,6 +26,11 @@ struct GossipNode {
 
 typedef list<GossipNode> GossipNodeList
 
+struct GossipNodeView {
+  1:map<string,list<string>> neighborhood,
+  2:list<string> view,
+}
+
 /*
   A message consists of the node that sent it
   as well as the uuid of the message itself.
@@ -117,7 +122,7 @@ service Gossiping {
     this call is this nodes original, prior to
     mixing, view.
   */
-  GossipNodeList view( 1:GossipNodeList nodeList ),
+  GossipNodeView view( 1:GossipNodeView view ),
 
   /*
     This is called when another node adds this node to its
