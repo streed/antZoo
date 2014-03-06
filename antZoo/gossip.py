@@ -57,22 +57,37 @@ class GossipServiceHeart( threading.Thread ):
                 time.sleep( self.gossipService._roundTime )
 
 class GossipRouting( object ):
-    def __init__( self ):
+    def __init__( self, me ):
       self._nodes = {}
+      self._view = []
+      self._me = me
 
-    def add_path( self, _from, through ):
-      if _from in self._routes:
-        self._routes[_from].append( through )
+    def add_path( self, to, through ):
+      if not to in self._routes:
+        self._routes[to] = []
+    
+      if through == None:
+        self._routes[to].append( (me, to,) )
       else:
-        self._routes[_from] = [ through ]
+        self._routes[to].append( (me, through, to, ) )
 
-      self._routes[_from].sort( key=lambda a: len( a ) )
+      self._routes[to].sort( key=lambda a: len( a ) )
 
     def get_path( self, to ):
       if to in self._routes:
         return self._routes[to][0]
       else:
         return []
+
+    def view( self ):
+      keys = sorted( self._nodes.keys(), key=lambda a: a.id )
+
+      ret = []
+
+      for i in self._view:
+        ret.append( keys[i] )
+
+      return ret
 
 
 class GossipServiceHandler( object ):
