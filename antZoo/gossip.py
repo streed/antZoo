@@ -56,6 +56,25 @@ class GossipServiceHeart( threading.Thread ):
             finally:
                 time.sleep( self.gossipService._roundTime )
 
+class GossipRouting( object ):
+    def __init__( self ):
+      self._nodes = {}
+
+    def add_path( self, _from, through ):
+      if _from in self._routes:
+        self._routes[_from].append( through )
+      else:
+        self._routes[_from] = [ through ]
+
+      self._routes[_from].sort( key=lambda a: len( a ) )
+
+    def get_path( self, to ):
+      if to in self._routes:
+        return self._routes[to][0]
+      else:
+        return []
+
+
 class GossipServiceHandler( object ):
     def __init__( self, config ):
         #create a bloom filter with a capaticy of a million messages
@@ -67,7 +86,6 @@ class GossipServiceHandler( object ):
         self._tick = int( self.config["tick"] ) / 1000
         self._pulseTicks = int( self.config["pulseTicks"] )
         self._roundTime = self._tick * self._pulseTicks
-        #self._lock = threading.RLock()
         self._queue = Queue()
 
         logger.info( "Sleeping between rounds for %f seconds." % self._roundTime )
@@ -77,14 +95,8 @@ class GossipServiceHandler( object ):
         
         self.reload_nodes()
 
-        #self._zk = KazooClient( hosts="/".join( self.config["zk_hosts"] ) )
-        #self.zoo_start()
-
-
         self._heart = GossipServiceHeart( self )
         self._heart.start()
-
-        #self._setup_zk_watch()
 
     @classmethod
     def Server( cls, config ):
@@ -97,14 +109,6 @@ class GossipServiceHandler( object ):
         server = TServer.TThreadedServer( processor, transport, tfactory, pfactory );
 
         return server
-
-    def zoo_start( self ):
-        logger.info( "Starting ZooKeeper session" )
-        self._zk.start()
-
-    def zoo_stop( self ):
-        logger.info( "Ending the ZooKeeper session." )
-        self._zk.stop()
 
     def round( self ):
         """
