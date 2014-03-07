@@ -4,6 +4,7 @@ import random
 import threading
 import time
 import yaml
+import sys
 
 from pybloom import BloomFilter
 from Queue import Queue
@@ -54,7 +55,7 @@ class GossipServiceHeart( threading.Thread ):
                     self.gossipService._queue.put( ( self.gossipService.exchangeViews, ( ), ) )
                     logger.info( self.gossipService._view )
             except Exception as e:
-                logger.info( e )
+                logger.info( "%s" % ( e ) )
             finally:
                 time.sleep( self.gossipService._roundTime )
 
@@ -76,6 +77,8 @@ class GossipServiceHandler( object ):
 
         self._status = GossipStatus.IDLE
         self._node = GossipNode( self.config["address"], int( self.config["port"] ), self._status )
+
+        self._id = "%s:%s" % ( self.config["address"], self.config["port"] )
         
         self.reload_nodes()
 
@@ -99,15 +102,15 @@ class GossipServiceHandler( object ):
             This is called in the heart thread, so it can block.
         """
         try:
-            logger.info( "Getting item from queue." )
             message = self._queue.get( block=False, timeout=self._pulseTicks )
 
             logger.info( message )
-
             message[0]( *message[1] )
         except Exception as e:
             if( not str( e ) == "" ):
-                logger.info( e )
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                logger.info( "%s" % ( e ) )
+                raise
 
     def view( self, view ):
         """
@@ -116,8 +119,8 @@ class GossipServiceHandler( object ):
             the two lists.
 
             {
-              neighborhood: { "b": [ ( "a", "b", ), ( "a", "c", "b", ) ], 
-                              "c": [ ( "a", "c", ), ( "a", "b", "c", ) ],
+              neighborhood: { "b": [ "a", "c" ], 
+                              "c": [ "a", "b" ],
                             }
                       view: [
                               "b",
@@ -129,18 +132,22 @@ class GossipServiceHandler( object ):
 
         self._view = GossipNodeView()
 
-        self._view.view = ret[:]
+        self._view.view = ret.view[:]
         self._view.neighborhood = copy.deepcopy( ret.neighborhood )
 
-        #Add any new edges to the graph that it discovers. 
-        for k in view.neighborhood:
-          if all( ( not self._id in i ) for i in view.neighborhood[k] ):
-            t = tuple( [self._id] + view.neighborhood[k][0] )
 
-            if k in self._view.neighborhood and not t in self._view.neighborhood[k]:
-              self._view.neighborhood[k].append( t )
-              self._view.neighborhood[k] = sorted( self._view.neighborhood[k], key=lambda a: len( a ) )
+        for k in view.view:
+          if k in self._view.neighborhood:
+            if not view.owner in self._view.neighborhood[k]:
+              self._view.neighborhood[k].append( view.owner )
+          else:
+            self._view.neighborhood[k] = [ view.owner ]
 
+        if len( self._view.view ) < self._fanout:
+          self._view.view.append( view.owner )
+
+
+        logger.info( self._view )
         return ret
 
     def get_view( self ):
@@ -272,13 +279,13 @@ class GossipServiceHandler( object ):
 
     def exchangeViews( self ):
         for n in self._view.view:
-            logger.info( "View: %s" % n )
             c = make_client( n )
-            destroy_client( c )
+            logger.info( "Connecting to %s" % n )
             c.view( self._view )
 
     def reload_nodes( self ):
         self._view = self._load_saved_list()
+        self._view.owner = self._id
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )

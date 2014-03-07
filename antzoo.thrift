@@ -29,6 +29,7 @@ typedef list<GossipNode> GossipNodeList
 struct GossipNodeView {
   1:map<string,list<string>> neighborhood,
   2:list<string> view,
+  3:string owner
 }
 
 /*
@@ -133,7 +134,7 @@ service Gossiping {
   /*
     Retreives the current view from this node.
   */
-  GossipNodeList get_view(),
+  GossipNodeView get_view(),
 
   /*
     This simply is used to send a recruit message
