@@ -51,11 +51,10 @@ class GossipServiceHeart( threading.Thread ):
                 self.gossipService.round()
 
                 if( self.rounds % 7 == 0 ):
-                    logger.info( "Exchanging views." )
                     self.gossipService._queue.put( ( self.gossipService.exchangeViews, ( ), ) )
-                    logger.info( self.gossipService._view )
             except Exception as e:
                 logger.info( "%s" % ( e ) )
+                raise
             finally:
                 time.sleep( self.gossipService._roundTime )
 
@@ -104,7 +103,6 @@ class GossipServiceHandler( object ):
         try:
             message = self._queue.get( block=False, timeout=self._pulseTicks )
 
-            logger.info( message )
             message[0]( *message[1] )
         except Exception as e:
             if( not str( e ) == "" ):
@@ -134,7 +132,7 @@ class GossipServiceHandler( object ):
 
         self._view.view = ret.view[:]
         self._view.neighborhood = copy.deepcopy( ret.neighborhood )
-
+        self._view.owner = self._id
 
         for k in view.view:
           if k in self._view.neighborhood:
@@ -146,8 +144,6 @@ class GossipServiceHandler( object ):
         if len( self._view.view ) < self._fanout:
           self._view.view.append( view.owner )
 
-
-        logger.info( self._view )
         return ret
 
     def get_view( self ):
@@ -262,20 +258,6 @@ class GossipServiceHandler( object ):
             self._ant.run()
         else:
             logger.info( "Ant is already running." )
-
-    def attemptBadNodes( self ):
-        newBadList = []
-        for b in self._badNodesList:
-            try:
-                logger.info( "Attempting to reconnect to %s:%d" % ( b.address, b.port ) )
-                c = make_client( b.address, b.port )
-                destroy_client( c )
-                self._view.view.append( b )
-            except:
-                logger.info( "Attempted to reconnect to node: %s:%d" % ( b.address, b.port ) )
-                newBadList.append( b )
-
-        self._badNodesList = newBadList
 
     def exchangeViews( self ):
         for n in self._view.view:
