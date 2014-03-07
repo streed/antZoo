@@ -1,9 +1,9 @@
+import copy
 import logging
 import random
 import threading
 import time
 import yaml
-
 
 from pybloom import BloomFilter
 from Queue import Queue
@@ -14,19 +14,21 @@ from thrift.protocol import TBinaryProtocol
 from thrift.server import TServer
 
 from .gossipService.gossiping.Gossiping import Client, Processor
-from .gossipService.gossiping.ttypes import GossipStatus, GossipNode, GossipData
+from .gossipService.gossiping.ttypes import GossipStatus, GossipNode, GossipData, GossipNodeView
 
 logging.basicConfig( level=logging.INFO )
 logger = logging.getLogger( __name__ )
 
-def make_client( address, port ):
-    transport = TSocket.TSocket( address, port )
-    transport = TTransport.TBufferedTransport( transport )
-    protocol = TBinaryProtocol.TBinaryProtocol( transport )
-    client = Client( protocol )
-    transport.open()
+def make_client( addressPort ):
+  address, port = addressPort.split( ":" )
+  port = int( port )
+  transport = TSocket.TSocket( address, port )
+  transport = TTransport.TBufferedTransport( transport )
+  protocol = TBinaryProtocol.TBinaryProtocol( transport )
+  client = Client( protocol )
+  transport.open()
 
-    return client
+  return client
 
 def destroy_client( c ):
     pass
@@ -49,8 +51,8 @@ class GossipServiceHeart( threading.Thread ):
 
                 if( self.rounds % 7 == 0 ):
                     logger.info( "Exchanging views." )
-                    #self.gossipService.exchangeViews()
                     self.gossipService._queue.put( ( self.gossipService.exchangeViews, ( ), ) )
+                    logger.info( self.gossipService._view )
             except Exception as e:
                 logger.info( e )
             finally:
@@ -112,32 +114,37 @@ class GossipServiceHandler( object ):
             This will take in the nodeList from
             the other peer and then randomly merge
             the two lists.
+
+            {
+              neighborhood: { "b": [ ( "a", "b", ), ( "a", "c", "b", ) ], 
+                              "c": [ ( "a", "c", ), ( "a", "b", "c", ) ],
+                            }
+                      view: [
+                              "b",
+                              "c"
+                            ]
+            }
         """
-        ret = self._nodeList[:]
+        ret = self._view
 
-        logger.info( "Merging remote view with my view." )
+        self._view = GossipNodeView()
 
-        poolNodes = nodeList + self._nodeList 
-        pool = { "%s:%d" % ( n.address, n.port ) for n in poolNodes if n != self._node }
+        self._view.view = ret[:]
+        self._view.neighborhood = copy.deepcopy( ret.neighborhood )
 
-        logger.info( "Node to choose from: %s" % pool )
+        #Add any new edges to the graph that it discovers. 
+        for k in view.neighborhood:
+          if all( ( not self._id in i ) for i in view.neighborhood[k] ):
+            t = tuple( [self._id] + view.neighborhood[k][0] )
 
-        if( len( pool ) < self._fanout ):
-            ret = self._nodeList[:]
-        else:
-            c = random.sample( pool, self._fanout )
-            c = { ( "%s:%d" % ( n.address, n.port ) ): n for n in poolNodes if "%s:%d" % ( n.address, n.port ) in c }
-            self._nodeList = c.values()
-
-        self._save_nodes()
-        self.reload_nodes()
-
-        logger.info( "NodeList: %s" % self._nodeList )
+            if k in self._view.neighborhood and not t in self._view.neighborhood[k]:
+              self._view.neighborhood[k].append( t )
+              self._view.neighborhood[k] = sorted( self._view.neighborhood[k], key=lambda a: len( a ) )
 
         return ret
 
     def get_view( self ):
-        return self._nodeList
+        return self._view
    
     def new_job( self, job ):
         """
@@ -187,9 +194,9 @@ class GossipServiceHandler( object ):
     def _disseminate( self, data ):
         logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
 
-        for n in self._nodeList:
+        for n in self._view.view:
             logger.info( n )
-            c = make_client( n.address, n.port )
+            c = make_client( n )
             c.disseminate( data )
 
             destroy_client( c )
@@ -204,8 +211,8 @@ class GossipServiceHandler( object ):
     def _added_to_view( self ):
         logger.info( "Requesting that I be added to my view's zk lists." )
 
-        for n in self._nodeList:
-            c = make_client( n.address, n.port )
+        for n in self._view.view:
+            c = make_client( n )
             c.added_to_view( self._node )
 
             destroy_client( c )
@@ -215,7 +222,7 @@ class GossipServiceHandler( object ):
 
         ant = Ant( self._node, int( self.config["ant_port"] ) )
 
-        for n in self._nodeList:
+        for n in self._view.view:
             n.recruit( job, ant )
 
     def _spawn_ant( self ):
@@ -256,7 +263,7 @@ class GossipServiceHandler( object ):
                 logger.info( "Attempting to reconnect to %s:%d" % ( b.address, b.port ) )
                 c = make_client( b.address, b.port )
                 destroy_client( c )
-                self._nodeList.append( b )
+                self._view.view.append( b )
             except:
                 logger.info( "Attempted to reconnect to node: %s:%d" % ( b.address, b.port ) )
                 newBadList.append( b )
@@ -264,39 +271,28 @@ class GossipServiceHandler( object ):
         self._badNodesList = newBadList
 
     def exchangeViews( self ):
-        for n in self._nodeList:
+        for n in self._view.view:
             logger.info( "View: %s" % n )
-            c = make_client( n.address, n.port )
+            c = make_client( n )
             destroy_client( c )
-            c.view( self._nodeList + [ self._node ] )
+            c.view( self._view )
 
     def reload_nodes( self ):
-        self._nodeList, self._badNodesList = self._load_saved_list()
+        self._view = self._load_saved_list()
 
     def _load_saved_list( self ):
         nodeList = yaml.load( open( self.config["node_list"] ) )
-        ret = []
+        ret = GossipNodeView()
 
-        bad_nodes = []
+        ret.neighborhood = nodeList["neighborhood"]
+        ret.view = nodeList["view"]
 
-        for n in nodeList["nodes"]:
-            try: 
-                c = make_client( n["address"], n["port"] )
-                destroy_client( c )
-                ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
-            except:
-                logger.info( "Could not connect to node: %s:%d" % ( n["address"], n["port"] ) )
-                ret.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
-                bad_nodes.append( GossipNode( address=n["address"], port=n["port"], status=n["status"] ) )
-
-        return ret, bad_nodes
+        return ret
 
     def _save_nodes( self ):
-        out = []
+      out = { "neighborhood": self._view.neighborhood, "view": self._view.view }
 
-        for n in self._nodeList:
-            out.append( { "address": n.address, "port": n.port, "status": n.status } )
+      with open( self.config["node_list"], "w" ) as f:
+        f.write( yaml.dump( out ) )
 
-        with open( self.config["node_list"], "w" ) as f:
-            f.write( yaml.dump( { "nodes": out } ) ) 
 
