@@ -166,19 +166,30 @@ class GossipServiceHandler( object ):
     self._ant_client.new_job( job )
 
     #Recruit ants for the job.
-    self._queue.push( ( self._recruit, ( job, ), ) )
-
-    job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
+    #self._queue.push( ( self._recruit, ( job, ), ) )
+    self.recruit( job )
 
   def recruit( self, job ):
-   self._queue.put( ( self._disseminate, ( job, ), ) )
+    if( not data.uuid in self.messages ):
+      data.hops += 1
+      job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
+      logger.info( job_tuple )
+
+      self._queue.put( ( self._recruit, ( job, ), ) ) 
+
+      self.messages.add( data.uuid )
+
+  def _recruit( self, job ):
+    logger.info( "Recruiting: %s" % job )
+
+    for n in self._view.view:
+      logger.info( n )
+      c = make_client( n )
+      c.recruit( job )
+
+      destroy_client( c )
 
   def disseminate( self, data ):
-    if( not data.uuid in self.messages ):
-      if( isinstance( data, GossipJob ) ):
-        data.hops += 1
-        job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
-        logger.info( job_tuple )
       elif( isinstance( data, GossipData ) ):
         self.storage[data.key] = data.value
 
