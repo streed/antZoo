@@ -88,8 +88,11 @@ struct JobUpdate {
 */
 struct GossipJob { 
   1:GossipNode leader,
-  2:Job job,
-  3:i64 timestamp
+  2:string uuid,
+  3:Job job,
+  4:i64 timestamp,
+  5:i32 hop,
+  6:double priority
 }
 
 struct GossipJobUpdate {
