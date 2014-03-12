@@ -171,13 +171,7 @@ class GossipServiceHandler( object ):
     job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
 
   def recruit( self, job ):
-   self._queue.put( ( self._disseminate, ( job, ), ) ) 
-
-  def added_to_view( self, node ):
-    #Add ourselves to this node's view. Make it so when/if we die our node is automatically
-    #deleted.
-    self._zk.create( "/nodes/views/%s/%s" % ( node.id, self.config["id"] ), ephemeral=True )
-
+   self._queue.put( ( self._disseminate, ( job, ), ) )
 
   def disseminate( self, data ):
     if( not data.uuid in self.messages ):
@@ -185,15 +179,14 @@ class GossipServiceHandler( object ):
         data.hops += 1
         job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
         logger.info( job_tuple )
-      logger.info( "Queuing, disseminate" )
+      elif( isinstance( data, GossipData ) ):
+        self.storage[data.key] = data.value
+
       self._queue.put( ( self._disseminate, ( data, ), ) )
-      logger.info( "Storing value." )
-      self.storage[data.key] = data.value
-      logger.info( "Add the data.uuid to the self.messages bloom filter" )
       self.messages.add( data.uuid )
 
   def _disseminate( self, data ):
-    logger.info( "Disseminating %s => %s" % ( data.key, data.value ) )
+    logger.info( "Disseminating: %s" % data )
 
     for n in self._view.view:
       logger.info( n )
@@ -237,7 +230,7 @@ class GossipServiceHandler( object ):
       tfactory = TTransport.TBufferedTrasnportFactory()
       pfactory = TBinaryProtocol.TBinaryProtocolFactory()
 
-      server = TServer.TSimpleServer( processor, transport, tfactory, pfactory )
+      server = TServer.TThreadedServer( processor, transport, tfactory, pfactory )
 
       self._ant_server = server
 
