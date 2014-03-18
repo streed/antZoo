@@ -149,7 +149,7 @@ class GossipServiceHandler( object ):
         if( self.ant == None ):
           self.spawn_ant( job_tuple )
         else:
-          self._ant_client.signal_new_job( job_tuple )
+          self.ant.signal_new_job( job_tuple )
 
         self._queue.put( ( self._recruit, ( job, ), ) ) 
         self.messages.add( data.uuid )
@@ -211,7 +211,6 @@ class GossipServiceHandler( object ):
       server = TServer.TThreadedServer( processor, transport, tfactory, pfactory )
 
       self._ant_server = server
-      self._ant_client = self._ant_server.make_client()
 
       #This is kind of a hack
       #Subclass the TServer and allow
