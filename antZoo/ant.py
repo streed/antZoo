@@ -44,28 +44,25 @@ class AntZooHandler:
 
         self._config = yaml.load( open( config ) )
         self._id = self._config["id"]
-        self.zk = KazooClient( hosts="/".join( self._config["zk"] ) )
         self._leader = False
         self._has_leader = False
         self._is_working = False
         self._is_running_for_leader = False
-        self._election = None
-
-        self.zoo_start()
-
-    def zoo_start( self ):
-        self.zk.start()
-        self.zk.ensure_path( "/nodes" )
-        self.zk.create( "/nodes/%s" % ( self._id ), ephemeral=True, makepath=True )
-
-    def zoo_stop( self ):
-        self.zk.stop()
 
     def new_job( self, job ):
         self.create_work_group( job.id )
         self.create_work_queue( job.id )
         self.join_work_group( job.id )
         self.setup_election( job.id )
+
+    def process_task( self, task ):
+      return None
+
+    def get_update( self, task ):
+      return self._get_status()
+
+    def signal_new_job( self, job ):
+      self._start_new_job( job )
 
     @property
     def is_leader( self ):
@@ -78,62 +75,4 @@ class AntZooHandler:
         else:
             return None
 
-    def start_election( self, job_id ):
-        if( not self._is_running_for_leader and not self._leader ):
-            self._election = self.zk.Election( "/work_elections/%s" % job_id, self._id )
-            self._is_running_for_leader = True
-            self._last_job_id = job_id
-
-            if( not self.zk.exists( "/work_election_signals/%s" % job_id ) ):
-                self.zk.ensure_path( "/work_election_signals/%s" % ( job_id ) )
-            self.zk.get( "/work_election_signals/%s" % job_id, watch=self._cancel_election )
-
-            self._election_runner = ElectionRunner( self )
-            self._election_runner.start()
-        else:
-            raise AntZooClientError( "Cannot start an election while this node is currently in the process of an election." )
-
-    def create_work_group( self, group_id ):
-        if( self.is_leader ):
-            self._create_work_group( group_id )
-        else:
-            raise AntZooClientError( "Cannot create a group when not a leader." )
-
-    def create_work_queue( self, queue_id ):
-        if( self.is_leader ):
-            self._create_work_queue( queue_id )
-        else:
-            raise AntZooClientError( "Cannot create a group when not a leader." )
-
-    def join_work_group( self, group_id ):
-        self._join_work_group( group_id )
-
-    def _create_work_group( self, group_id ):
-        """
-            Creates the group as a permenant node
-            then joins the group itself by creating a child as a ephemeral node.
-        """
-        self.zk.ensure_path( "/work_groups/%s" % group_id )
-        self._join_work_group( group_id )
-
-    def _join_work_group( self, group_id ):
-        """
-            Joins the group by creating an ephemeral node.
-        """
-        self.zk.ensure_path( "/work_groups/%s" % ( group_id ) )
-
-        if( not self.zk.exists( "/work_groups/%s/%s" % ( group_id, self._id ) ) ):
-            self.zk.create( "/work_groups/%s/%s" % ( group_id, self._id ), ephemeral=True )
-
-
-    def _set_leader( self ):
-        self.zk.set( "/work_election_signals/%s" % self._last_job_id, bytes( "%s" % self._id ) )
-        self._election = None
-        self._leader = True
-        self._is_running_for_leader = False
-
-    def _cancel_election( self, data ):
-        print "Leader was found"
-        if( self._election ):
-            self._election.cancel()
 

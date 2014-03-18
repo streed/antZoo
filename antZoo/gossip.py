@@ -52,6 +52,7 @@ class GossipServiceHandler( object ):
     self._heart.start()
 
     self.jobs = []
+    self._leader = False
 
   @classmethod
   def Server( cls, config ):
@@ -125,7 +126,7 @@ class GossipServiceHandler( object ):
             - Sending out a broadcast message to recruit workers. 
             - Starting the Ant server.
     """
-
+    self._leader = True
     #Spawn the ant server first.
     #self._spawn_ant()
 
@@ -137,7 +138,7 @@ class GossipServiceHandler( object ):
     self.recruit( job )
 
   def recruit( self, job ):
-    if( not data.uuid in self.messages ):
+    if( not data.uuid in self.messages and not self._leader ):
       data.hops += 1
       job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
       logger.info( job_tuple )
