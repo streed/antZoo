@@ -16,50 +16,17 @@ from thrift.server import TServer
 
 from .gossipService.gossiping.Gossiping import Client, Processor
 from .gossipService.gossiping.ttypes import GossipStatus, GossipNode, GossipData, GossipNodeView
+from .gossipheart import GossipServiceHeart
+from .utils import make_client, destroy_client
 
 logging.basicConfig( level=logging.INFO )
 logger = logging.getLogger( __name__ )
 
-def make_client( addressPort ):
-  address, port = addressPort.split( ":" )
-  port = int( port )
-  transport = TSocket.TSocket( address, port )
-  transport = TTransport.TBufferedTransport( transport )
-  protocol = TBinaryProtocol.TBinaryProtocol( transport )
-  client = Client( protocol )
-  transport.open()
-
-  return client
-
-def destroy_client( c ):
-    pass
-
-
-class GossipServiceHeart( threading.Thread ):
-    def __init__( self, gossipService ):
-        super( GossipServiceHeart, self ).__init__()
-        self.daemon = True
-
-        self.gossipService = gossipService
-
-        self.rounds = 0
-
-    def run( self ):
-        while True:
-            try:
-                self.rounds += 1
-                self.gossipService.round()
-
-                if( self.rounds % 7 == 0 ):
-                    self.gossipService._queue.put( ( self.gossipService.exchangeViews, ( ), ) )
-            except Exception as e:
-                logger.info( "%s" % ( e ) )
-                raise
-            finally:
-                time.sleep( self.gossipService._roundTime )
 
 
 class GossipServiceHandler( object ):
+  THRESHOLD = 0.0001
+
   def __init__( self, config ):
     #create a bloom filter with a capaticy of a million messages
     #with an error rate of 0.000001%
@@ -83,6 +50,8 @@ class GossipServiceHandler( object ):
 
     self._heart = GossipServiceHeart( self )
     self._heart.start()
+
+    self.jobs = []
 
   @classmethod
   def Server( cls, config ):
@@ -160,10 +129,10 @@ class GossipServiceHandler( object ):
     """
 
     #Spawn the ant server first.
-    self._spawn_ant()
+    #self._spawn_ant()
 
     #Setup the job before the recruitment process.
-    self._ant_client.new_job( job )
+    #self._ant_client.new_job( job )
 
     #Recruit ants for the job.
     #self._queue.push( ( self._recruit, ( job, ), ) )
@@ -175,9 +144,9 @@ class GossipServiceHandler( object ):
       job_tuple = ( math.exp( -( data.hops - data-priority ) ), data, )
       logger.info( job_tuple )
 
-      self._queue.put( ( self._recruit, ( job, ), ) ) 
-
-      self.messages.add( data.uuid )
+      if( job_tuple[0] >= THRESHOLD )
+        self._queue.put( ( self._recruit, ( job, ), ) ) 
+        self.messages.add( data.uuid )
 
   def _recruit( self, job ):
     logger.info( "Recruiting: %s" % job )

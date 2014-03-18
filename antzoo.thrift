@@ -151,7 +151,12 @@ service Gossiping {
     as the job is received the node will begin
     to work on the job.
   */
-  oneway void send_job( 1:GossipJob job ),
+  void send_job( 1:GossipJob job ),
+
+  /*
+    This accepts a job recruitment.
+  */
+  void acceptRecruitment( 1:string me ),
 
   /*
     This is called on the job leader each time
