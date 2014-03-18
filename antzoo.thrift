@@ -204,4 +204,6 @@ service AntZoo {
   */
   GossipJobUpdate get_update( 1:GossipJob task ),
 
+  oneway void signal_new_job( 1:GossipJob job ),
+
 }
