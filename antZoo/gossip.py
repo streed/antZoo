@@ -126,16 +126,17 @@ class GossipServiceHandler( object ):
             - Sending out a broadcast message to recruit workers. 
             - Starting the Ant server.
     """
-    self._leader = True
-    #Spawn the ant server first.
-    #self._spawn_ant()
+    if( not self._leader ):
+      self._leader = True
+      #Spawn the ant server first.
+      self._spawn_ant()
 
-    #Setup the job before the recruitment process.
-    #self._ant_client.new_job( job )
+      #Setup the job before the recruitment process.
+      self._ant_client.new_job( job )
 
-    #Recruit ants for the job.
-    #self._queue.push( ( self._recruit, ( job, ), ) )
-    self.recruit( job )
+      #Recruit ants for the job.
+      #self._queue.push( ( self._recruit, ( job, ), ) )
+      self.recruit( job )
 
   def recruit( self, job ):
     if( not data.uuid in self.messages and not self._leader ):
@@ -147,10 +148,12 @@ class GossipServiceHandler( object ):
         self.jobs.append( job )
         self.jobs.sort( key=lambda a: a[0] )
 
+        njob = self.jobs[0]
+
         if( self.ant == None ):
           self.spawn_ant( job_tuple )
         else:
-          self._ant_client.signal_new_job( job_tuple )
+          self._ant_client.signal_new_job( njob[1] )
 
         self._queue.put( ( self._recruit, ( job, ), ) ) 
         self.messages.add( data.uuid )

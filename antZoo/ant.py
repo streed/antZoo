@@ -2,6 +2,7 @@ import threading
 import random
 import rpyc
 import yaml
+from Queue import Queue
 from kazoo.client import KazooClient
 from docopt import docopt
 
@@ -19,24 +20,43 @@ from docopt import docopt
         -c              Where to find the config.
 """
 
-class ElectionRunner( threading.Thread ):
-    def __init__( self, ant ):
-        super( ElectionRunner, self ).__init__()
-        self.ant = ant
+class AntJobRunner( threading.Thread ):
 
-    def run( self ):
-        """
-            This will allow for the main thread to continue to run.
-            If the election says that this ant wins then call the
-            _set_leader() method to switch over this ant to that
-            job.
-        """
-        def set_leader():
-            self.ant._set_leader()
-        self.ant._election.run( set_leader )
+  def __init__( self ):
+    self._queue = Queue()
+    self._new_job = threading.Event()
+    self.daemon = True
+    self.job = None
 
-class AntZooClientError( Exception ):
-    pass
+  def run( self ):
+    while True:
+     if( sef._new_job.wait() ) 
+      self._new_job.clear()
+
+      if( self.job ):
+        self._signal_leader_leaving( self.id )
+        self._stop_job()
+        self.job = None
+
+      self.job = self._queue.pop()
+
+      self._run()
+
+  def push( self, job ):
+    self._queue.push( job )
+    self._signal.set()
+
+  def _run( self ):
+    class Runner( threading.Thread ):
+      def __init__( self, runner ):
+        self.runner = runner
+      def run( self ):
+        job = self.runner.job
+        while not self.runner._job_signal.is_set():
+          pass
+
+  def _stop_job( self ):
+    self._job_signal.set()
 
 class AntZooHandler:
 
@@ -49,11 +69,11 @@ class AntZooHandler:
         self._is_working = False
         self._is_running_for_leader = False
 
+
     def new_job( self, job ):
-        self.create_work_group( job.id )
-        self.create_work_queue( job.id )
-        self.join_work_group( job.id )
-        self.setup_election( job.id )
+      self._job = job
+      self._job_handler.push( job )
+      self._job_handler._new_job.set()
 
     def process_task( self, task ):
       return None
