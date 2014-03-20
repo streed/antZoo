@@ -20,13 +20,26 @@ from docopt import docopt
         -c              Where to find the config.
 """
 
+class AntScriptRunner( object ):
+  def __init__( self, codeLocation ):
+    self.codeLocation = codeLocation
+
+    self._job = subprocess.Popen( self.codeLocation, stdout=subprocess.PIPE )
+
+  def send( self, line ):
+    return self._job.communicate( input=line )[0]
+
+  def finish( self ):
+    self._job.communicate input="ANT-JOB-DONE\n" )
+
 class AntJobRunner( threading.Thread ):
 
-  def __init__( self ):
+  def __init__( self, ant ):
     self._queue = Queue()
     self._new_job = threading.Event()
     self.daemon = True
     self.job = None
+    self.ant = ant
 
   def run( self ):
     while True:
@@ -50,25 +63,33 @@ class AntJobRunner( threading.Thread ):
     class Runner( threading.Thread ):
       def __init__( self, runner ):
         self.runner = runner
+        self.tasks = Queue()
       def run( self ):
         job = self.runner.job
+        self._run_job( job )
         while not self.runner._job_signal.is_set():
-          pass
+          task = self.tasks.get()
+          out = self._job.send( task.line )
+          self.runner.ant.send_job_response( out )
+
+    def _run_job( self, job ):
+      self._job = self._spawn( job.source )
+
+    def _spawn( self, job_code ):
+      return AntScriptRunner( job_code )
 
   def _stop_job( self ):
     self._job_signal.set()
 
+  def new_task( self, task ):
+    self._runner.tasks.push( task )
+
 class AntZooHandler:
 
-    def __init__( self, config ):
+    def __init__( self, ant ):
+      self._job_handler = AntJobRunner( ant )
 
-        self._config = yaml.load( open( config ) )
-        self._id = self._config["id"]
-        self._leader = False
-        self._has_leader = False
-        self._is_working = False
-        self._is_running_for_leader = False
-
+      self._job_handler.start()
 
     def new_job( self, job ):
       self._job = job
