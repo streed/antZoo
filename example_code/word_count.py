@@ -18,3 +18,4 @@ while True:
     counts[w] += 1
 
   print simplejson.dumps( counts )
+  sys.stdout.flush()
