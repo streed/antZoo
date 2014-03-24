@@ -22,8 +22,6 @@ from .utils import make_client, destroy_client
 logging.basicConfig( level=logging.INFO )
 logger = logging.getLogger( __name__ )
 
-
-
 class GossipServiceHandler( object ):
   THRESHOLD = 0.0001
 
@@ -151,7 +149,8 @@ class GossipServiceHandler( object ):
         njob = self.jobs[0]
 
         if( self.ant == None ):
-          self.spawn_ant( job_tuple )
+          self._spawn_ant()
+          self._ant_client.new_job( job_tuple )
         else:
           self._ant_client.signal_new_job( njob[1] )
 
