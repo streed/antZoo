@@ -29,7 +29,6 @@ class AntScriptRunner( object ):
 
   def send( self, line ):
     self._job.stdin.write( line )
-    self._job.stdin.flush()
     out = self._job.stdout.readline()
     return out
 
@@ -79,7 +78,7 @@ class AntJobRunner( threading.Thread ):
         while not self.runner._job_signal.is_set() and not self.tasks.empty():
           task = self.tasks.get( block=False, timeout=2 )
           out = self._job.send( task )
-          self.runner.ant.send_job_response( out )
+          self.runner.send_job_response( out )
 
         self._job.finish()
 
@@ -104,6 +103,10 @@ class AntJobRunner( threading.Thread ):
     self._is_accepting_work.wait()
     self._runner.tasks.put( task )
 
+  def send_job_response( self, resp ):
+    if( resp != "\n" ):
+      print resp
+
 class AntZooHandler:
 
     def __init__( self, ant ):
@@ -112,7 +115,7 @@ class AntZooHandler:
       self._job_handler.start()
 
     def new_job( self, job ):
-      if( not  self.is_leader )
+      if( not  self.is_leader ):
         self._job = job
         self._job_handler.push( job )
         self._job_handler._new_job.set()
@@ -128,7 +131,7 @@ class AntZooHandler:
             self.ant = ant
 
           def run( self ):
-            with( open( self.current_work_data, "r" ) as f:
+            with open( self.current_work_data, "r" ) as f:
                 index = 0
                 clients = [ make_client( worker ) for worker in self._workers ]
                 while True:
